@@ -28,3 +28,19 @@ class ReportOut(BaseModel):
     total_revenue: float
     record_count: int
     avg_order_value: float
+
+
+class FulfillmentReportRow(BaseModel):
+    id: int
+    date: str
+    client_name: str
+    project: str
+    item: str
+    total_required: float
+    delivered: float
+    pending: float
+    uom: str
+
+
+class FulfillmentReportOut(BaseModel):
+    rows: List[FulfillmentReportRow]

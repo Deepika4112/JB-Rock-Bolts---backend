@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+import shutil
+import os
+import uuid
 from app.database import get_db
 from app.models.models import Sale, SaleActivity, PurchaseOrder
 from app.schemas.sale import SaleCreate, SaleUpdate, SaleOut, SaleActivityCreate, SaleActivityOut
@@ -26,6 +29,22 @@ def list_sales(
     return q.order_by(Sale.created_at.desc()).offset(skip).limit(limit).all()
 
 
+@router.post("/upload")
+async def upload_invoice_file(file: UploadFile = File(...)):
+    UPLOAD_DIR = "uploads"
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+    
+    file_extension = os.path.splitext(file.filename)[1]
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    return {"file_url": f"/uploads/{unique_filename}"}
+
+
 @router.post("", response_model=SaleOut, status_code=status.HTTP_201_CREATED)
 def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
     po = db.get(PurchaseOrder, payload.po_id)
@@ -42,7 +61,7 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
         payload.dispatched_qty, payload.unit_price, payload.gst_rate, payload.freight
     )
 
-    invoice_number = generate_invoice_number(db)
+    invoice_number = payload.invoice_number or generate_invoice_number(db)
 
     sale = Sale(
         po_id=payload.po_id,
@@ -60,6 +79,13 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
         freight=payload.freight,
         payment_status=payload.payment_status,
         payment_note=payload.payment_note,
+        invoice_url=payload.invoice_url,
+        dispatch_from=payload.dispatch_from,
+        ship_to=payload.ship_to,
+        bill_to=payload.bill_to,
+        dispatched_through=payload.dispatched_through,
+        buyers_order_no=payload.buyers_order_no,
+        payment_terms=payload.payment_terms,
         created_by=payload.created_by,
         **financials,
     )
@@ -98,6 +124,28 @@ def update_sale(sale_id: int, payload: SaleUpdate, db: Session = Depends(get_db)
 
     updates = payload.model_dump(exclude_none=True)
     updated_by = updates.pop("updated_by", None)
+
+    # Handle dispatched_qty change
+    if "dispatched_qty" in updates:
+        new_qty = updates["dispatched_qty"]
+        diff = new_qty - sale.dispatched_qty
+        
+        po = db.get(PurchaseOrder, sale.po_id)
+        if po:
+            # Check if new quantity exceeds PO total
+            if (po.delivered_quantity + diff) > po.total_quantity:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Updated quantity exceeds PO total. Available: {po.total_quantity - (po.delivered_quantity - sale.dispatched_qty)}"
+                )
+            po.delivered_quantity += diff
+        
+        # Recalculate financials
+        financials = compute_sale_financials(
+            new_qty, sale.unit_price, sale.gst_rate, sale.freight
+        )
+        for field, value in financials.items():
+            setattr(sale, field, value)
 
     for field, value in updates.items():
         setattr(sale, field, value)

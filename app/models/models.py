@@ -83,7 +83,7 @@ class PurchaseOrder(Base):
     client_name = Column(String(200), nullable=False, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=True)
     po_number = Column(String(100), nullable=False, unique=True, index=True)
-    item = Column(String(300), nullable=False)
+    item = Column(String(300), nullable=True, default="")
     uom = Column(String(50), nullable=False, default="Nos")
     project = Column(String(300), nullable=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
@@ -95,7 +95,7 @@ class PurchaseOrder(Base):
     freight = Column(Float, nullable=False, default=0)
     payment_terms = Column(String(100), nullable=True)
     validity_date = Column(DateTime, nullable=True)
-    delivery_date = Column(DateTime, nullable=True)
+    file_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     created_by = Column(String(100), nullable=True)
     last_opened_at = Column(DateTime, nullable=True)
@@ -106,6 +106,7 @@ class PurchaseOrder(Base):
     client_rel = relationship("Client", back_populates="purchase_orders")
     project_rel = relationship("Project", back_populates="purchase_orders")
     sales = relationship("Sale", back_populates="purchase_order")
+    line_items = relationship("POLineItem", back_populates="purchase_order", cascade="all, delete-orphan", order_by="POLineItem.id")
 
     @property
     def pending_quantity(self) -> float:
@@ -131,6 +132,8 @@ class PurchaseOrder(Base):
 
     @property
     def subtotal(self) -> float:
+        if self.line_items:
+            return sum(li.quantity * li.unit_price for li in self.line_items)
         return self.total_quantity * self.unit_price
 
     @property
@@ -140,6 +143,26 @@ class PurchaseOrder(Base):
     @property
     def grand_total(self) -> float:
         return self.subtotal + self.gst_amount + self.freight
+
+    @property
+    def items_display(self) -> str:
+        """Comma-separated item names for display."""
+        if self.line_items:
+            return ", ".join(li.item for li in self.line_items)
+        return self.item or ""
+
+
+class POLineItem(Base):
+    __tablename__ = "po_line_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    po_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False)
+    item = Column(String(300), nullable=False)
+    quantity = Column(Float, nullable=False, default=0)
+    uom = Column(String(50), nullable=False, default="Nos")
+    unit_price = Column(Float, nullable=False, default=0)
+
+    purchase_order = relationship("PurchaseOrder", back_populates="line_items")
 
 
 class Sale(Base):
@@ -170,6 +193,13 @@ class Sale(Base):
     created_by = Column(String(100), nullable=True)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     updated_by = Column(String(100), nullable=True)
+    invoice_url = Column(String(500), nullable=True)
+    dispatch_from = Column(Text, nullable=True)
+    ship_to = Column(Text, nullable=True)
+    bill_to = Column(Text, nullable=True)
+    dispatched_through = Column(String(200), nullable=True)
+    buyers_order_no = Column(String(100), nullable=True)
+    payment_terms = Column(String(200), nullable=True)
 
     purchase_order = relationship("PurchaseOrder", back_populates="sales")
     activities = relationship(

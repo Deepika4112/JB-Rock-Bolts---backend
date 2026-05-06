@@ -26,6 +26,7 @@ class SaleActivityOut(BaseModel):
 class SaleCreate(BaseModel):
     po_id: int
     po_number: str
+    invoice_number: Optional[str] = None
     client_name: str
     item: str
     project: Optional[str] = None
@@ -38,6 +39,13 @@ class SaleCreate(BaseModel):
     freight: float = 0
     payment_status: PaymentStatus = PaymentStatus.PENDING
     payment_note: Optional[str] = None
+    invoice_url: Optional[str] = None
+    dispatch_from: Optional[str] = None
+    ship_to: Optional[str] = None
+    bill_to: Optional[str] = None
+    dispatched_through: Optional[str] = None
+    buyers_order_no: Optional[str] = None
+    payment_terms: Optional[str] = None
     created_by: Optional[str] = None
 
 
@@ -45,6 +53,13 @@ class SaleUpdate(BaseModel):
     payment_status: Optional[PaymentStatus] = None
     payment_note: Optional[str] = None
     dispatched_qty: Optional[float] = None
+    invoice_url: Optional[str] = None
+    dispatch_from: Optional[str] = None
+    ship_to: Optional[str] = None
+    bill_to: Optional[str] = None
+    dispatched_through: Optional[str] = None
+    buyers_order_no: Optional[str] = None
+    payment_terms: Optional[str] = None
     updated_by: Optional[str] = None
 
 
@@ -72,6 +87,13 @@ class SaleOut(BaseModel):
     created_by: Optional[str]
     updated_at: datetime
     updated_by: Optional[str]
+    invoice_url: Optional[str]
+    dispatch_from: Optional[str]
+    ship_to: Optional[str]
+    bill_to: Optional[str]
+    dispatched_through: Optional[str]
+    buyers_order_no: Optional[str]
+    payment_terms: Optional[str]
     activities: List[SaleActivityOut] = []
 
     model_config = {"from_attributes": True}

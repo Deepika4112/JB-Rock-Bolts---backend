@@ -248,7 +248,7 @@ def get_po_document(po_id: int, db: Session = Depends(get_db)):
       <div class="addr-company">M/s. {po.client_name}</div>
       {('<div>' + po.project + '</div>') if po.project else ''}
       <div>{po.location or '—'}</div>
-      {('<div><b>Delivery Date:</b> ' + _fmt_date(po.delivery_date) + '</div>') if po.delivery_date else ''}
+      {('<div><b>PO Validity:</b> ' + _fmt_date(po.validity_date) + '</div>') if po.validity_date else ''}
     </div>
   </div>
 
@@ -277,7 +277,26 @@ def get_po_document(po_id: int, db: Session = Depends(get_db)):
       </tr>
     </thead>
     <tbody>
-      <tr>
+      {''.join(
+          f'''<tr>
+            <td>{i+1}</td>
+            <td>—</td>
+            <td>—</td>
+            <td class="desc">
+              <b>{li.item}</b>
+              {('<br/><br/><b>Project:</b> ' + po.project) if po.project and i == 0 else ''}
+              {('<br/><b>Payment Terms:</b> ' + po.payment_terms) if po.payment_terms and i == 0 else ''}
+            </td>
+            <td>{li.uom or 'Nos'}</td>
+            <td class="num">{_fmt_inr(li.quantity)}</td>
+            <td class="num">{_fmt_inr(li.unit_price)}</td>
+            <td class="num">0%</td>
+            <td class="num">—</td>
+            <td class="num">{_fmt_inr(li.quantity * li.unit_price)}</td>
+            <td class="num">{_fmt_inr(li.quantity * li.unit_price)}</td>
+          </tr>'''
+          for i, li in enumerate(po.line_items)
+      ) if po.line_items else f'''<tr>
         <td>1</td>
         <td>—</td>
         <td>—</td>
@@ -293,9 +312,8 @@ def get_po_document(po_id: int, db: Session = Depends(get_db)):
         <td class="num">—</td>
         <td class="num">{_fmt_inr(subtotal)}</td>
         <td class="num">{_fmt_inr(subtotal)}</td>
-      </tr>
+      </tr>'''}
       <!-- blank rows for spacing -->
-      <tr><td colspan="11" style="height:22px"></td></tr>
       <tr><td colspan="11" style="height:22px"></td></tr>
     </tbody>
   </table>

@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from fastapi.staticfiles import StaticFiles
 import logging
+import os
 
 from app.config import settings
 from app.database import create_database_if_not_exists, engine, SessionLocal, Base
@@ -65,6 +67,15 @@ async def lifespan(app: FastAPI):
             except Exception:
                 pass
 
+            # Safely migrate purchase_orders.file_url
+            try:
+                conn.execute(text("SELECT file_url FROM purchase_orders LIMIT 1"))
+            except Exception:
+                try:
+                    conn.execute(text("ALTER TABLE purchase_orders ADD COLUMN file_url VARCHAR(500) NULL"))
+                except Exception:
+                    pass
+
             # Safely migrate records.client_id
             try:
                 conn.execute(text("SELECT client_id FROM records LIMIT 1"))
@@ -79,6 +90,24 @@ async def lifespan(app: FastAPI):
                 conn.execute(text("ALTER TABLE records ADD CONSTRAINT fk_rec_client FOREIGN KEY (client_id) REFERENCES clients(id)"))
             except Exception:
                 pass
+
+            # Safely migrate sales.invoice_url and address fields
+            try:
+                conn.execute(text("SELECT invoice_url FROM sales LIMIT 1"))
+            except Exception:
+                try:
+                    conn.execute(text("ALTER TABLE sales ADD COLUMN invoice_url VARCHAR(500) NULL"))
+                except Exception:
+                    pass
+
+            for col in ["created_by", "updated_by", "dispatch_from", "ship_to", "bill_to", "dispatched_through", "buyers_order_no", "payment_terms"]:
+                try:
+                    conn.execute(text(f"SELECT {col} FROM sales LIMIT 1"))
+                except Exception:
+                    try:
+                        conn.execute(text(f"ALTER TABLE sales ADD COLUMN {col} TEXT NULL"))
+                    except Exception:
+                        pass
     except Exception as e:
         logger.error(f"Error applying schema updates: {e}")
 
@@ -109,6 +138,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure uploads directory exists
+UPLOAD_DIR = "uploads"
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
+
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 app.include_router(constants.router)
 app.include_router(dashboard.router)

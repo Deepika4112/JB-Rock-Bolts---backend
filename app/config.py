@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     DB_USER: str = "root"
     DB_PASSWORD: str = ""
 
-    CORS_ORIGINS: str = "http://localhost:8080,http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:8080,http://localhost:3000,http://localhost:5173,http://localhost:8081,http://127.0.0.1:5173,http://127.0.0.1:8081"
 
     SECRET_KEY: str = "change-this-secret-key"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
