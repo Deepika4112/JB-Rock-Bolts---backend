@@ -122,7 +122,7 @@ def update_sale(sale_id: int, payload: SaleUpdate, db: Session = Depends(get_db)
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found.")
 
-    updates = payload.model_dump(exclude_none=True)
+    updates = payload.model_dump(exclude_unset=True)
     updated_by = updates.pop("updated_by", None)
 
     # Handle dispatched_qty change

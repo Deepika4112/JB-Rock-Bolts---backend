@@ -137,7 +137,7 @@ def update_purchase_order(po_id: int, payload: PurchaseOrderUpdate, db: Session 
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found.")
 
-    update_data = payload.model_dump(exclude_none=True, exclude={"line_items"})
+    update_data = payload.model_dump(exclude_unset=True, exclude={"line_items"})
     for field, value in update_data.items():
         setattr(po, field, value)
 
