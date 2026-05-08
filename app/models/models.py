@@ -202,6 +202,7 @@ class Sale(Base):
     e_way_bill_no = Column(String(100), nullable=True)
     buyers_order_no = Column(String(100), nullable=True)
     payment_terms = Column(String(200), nullable=True)
+    hsn_code = Column(String(50), nullable=True)
 
     purchase_order = relationship("PurchaseOrder", back_populates="sales")
     activities = relationship(

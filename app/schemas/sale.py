@@ -48,10 +48,12 @@ class SaleCreate(BaseModel):
     e_way_bill_no: Optional[str] = None
     buyers_order_no: Optional[str] = None
     payment_terms: Optional[str] = None
+    hsn_code: Optional[str] = None
     created_by: Optional[str] = None
 
 
 class SaleUpdate(BaseModel):
+    invoice_number: Optional[str] = None
     payment_status: Optional[PaymentStatus] = None
     payment_note: Optional[str] = None
     dispatched_qty: Optional[float] = None
@@ -64,6 +66,7 @@ class SaleUpdate(BaseModel):
     e_way_bill_no: Optional[str] = None
     buyers_order_no: Optional[str] = None
     payment_terms: Optional[str] = None
+    hsn_code: Optional[str] = None
     updated_by: Optional[str] = None
 
 
@@ -100,6 +103,7 @@ class SaleOut(BaseModel):
     e_way_bill_no: Optional[str]
     buyers_order_no: Optional[str]
     payment_terms: Optional[str]
+    hsn_code: Optional[str]
     activities: List[SaleActivityOut] = []
 
     model_config = {"from_attributes": True}

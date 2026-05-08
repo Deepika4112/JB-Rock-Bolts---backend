@@ -88,6 +88,7 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
         e_way_bill_no=payload.e_way_bill_no,
         buyers_order_no=payload.buyers_order_no,
         payment_terms=payload.payment_terms,
+        hsn_code=payload.hsn_code,
         created_by=payload.created_by,
         **financials,
     )

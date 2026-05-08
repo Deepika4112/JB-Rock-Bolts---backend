@@ -464,10 +464,16 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
     inv_date   = _fmt_date(sale.created_at)
     po_date    = _fmt_date(po.created_at)     if po else "—"
     deliv_date = _fmt_date(sale.updated_at)
-    pay_terms  = (po.payment_terms if po and po.payment_terms else
+    pay_terms  = (sale.payment_terms if sale.payment_terms else
+                  po.payment_terms if po and po.payment_terms else
                   sale.payment_note or "As per discussion")
     location   = (po.location if po and po.location else "—")
     project    = sale.project or "—"
+    ship_to_addr = sale.ship_to or location
+    bill_to_addr = sale.bill_to or sale.client_name
+    dispatched_via = sale.dispatched_through or "—"
+    buyer_order = sale.buyers_order_no or sale.po_number
+    hsn_sac    = sale.hsn_code or "—"
 
     # Fake IRN / Ack for display (real e-Invoice requires GST portal integration)
     import hashlib, time
@@ -681,7 +687,7 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
         </tr>
         <tr>
           <td class="lbl">Buyer's Order No.</td>
-          <td class="val">{sale.po_number}</td>
+          <td class="val">{buyer_order}</td>
           <td class="date-lbl">Dated</td>
           <td class="val">{po_date}</td>
         </tr>
@@ -693,7 +699,7 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
         </tr>
         <tr>
           <td class="lbl">Dispatched through</td>
-          <td colspan="3">—</td>
+          <td colspan="3">{dispatched_via}</td>
         </tr>
         <tr>
           <td class="lbl">Destination</td>
@@ -712,16 +718,14 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
     <div class="party-cell">
       <div class="party-type">Consignee (Ship to)</div>
       <div class="party-name">{sale.client_name}</div>
-      {('<div>' + project + '</div>') if project != '—' else ''}
-      <div>{location}</div>
+      <div style="white-space:pre-line">{ship_to_addr}</div>
       <div><b>GSTIN/UIN</b> : —</div>
       <div>State Name : —</div>
     </div>
     <div class="party-cell">
       <div class="party-type">Buyer (Bill to)</div>
       <div class="party-name">{sale.client_name}</div>
-      {('<div>' + project + '</div>') if project != '—' else ''}
-      <div>{location}</div>
+      <div style="white-space:pre-line">{bill_to_addr}</div>
       <div><b>GSTIN/UIN</b> : —</div>
       <div>State Name : —</div>
     </div>
@@ -748,7 +752,7 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
           <b>{sale.item}</b>
           {('<br/><span style="font-size:10px;color:#555">' + sale.project + '</span>') if sale.project else ''}
         </td>
-        <td class="ctr">—</td>
+        <td class="ctr">{hsn_sac}</td>
         <td class="num">{_fmt_inr(sale.dispatched_qty)}&nbsp;{sale.uom or 'Nos'}</td>
         <td class="num">{_fmt_inr(sale.unit_price)}</td>
         <td class="ctr">{sale.uom or 'Nos'}</td>
@@ -831,7 +835,7 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
     </thead>
     <tbody>
       <tr>
-        <td class="ctr">—</td>
+        <td class="ctr">{hsn_sac}</td>
         <td class="num">{_fmt_inr(sale.subtotal)}</td>
         <td class="ctr">{igst_rate}%</td>
         <td class="num">{_fmt_inr(igst_amt)}</td>

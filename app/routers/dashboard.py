@@ -2,24 +2,26 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.database import get_db
-from app.models.models import Record, PurchaseOrder, Client, PaymentStatus, DeliveryStatus
+from app.models.models import Sale, PurchaseOrder, Client, PaymentStatus
 from app.schemas.dashboard import DashboardStats, ChartData, ChartDataPoint, MonthlyTrend, RecentSale
 from typing import List
-from datetime import datetime
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 
 @router.get("/stats", response_model=DashboardStats)
 def get_stats(db: Session = Depends(get_db)):
-    total_revenue = db.query(func.sum(Record.price)).scalar() or 0
-    total_orders = db.query(func.count(Record.id)).scalar() or 0
-    total_clients = db.query(func.count(func.distinct(Record.client_name))).scalar() or 0
-    delivered_orders = db.query(func.count(Record.id)).filter(
-        Record.delivery_status == DeliveryStatus.DELIVERED
-    ).scalar() or 0
-    pending_payments = db.query(func.count(Record.id)).filter(
-        Record.payment_status == PaymentStatus.PENDING
+    # Total revenue from all sales (dispatches)
+    total_revenue = db.query(func.sum(Sale.grand_total)).scalar() or 0
+    # Total number of dispatches
+    total_orders = db.query(func.count(Sale.id)).scalar() or 0
+    # Total unique clients who have made a purchase
+    total_clients = db.query(func.count(func.distinct(Sale.client_name))).scalar() or 0
+    # Every sale entry represents a delivery/dispatch
+    delivered_orders = total_orders
+    # Payments that are not fully paid
+    pending_payments = db.query(func.count(Sale.id)).filter(
+        Sale.payment_status.in_([PaymentStatus.PENDING, PaymentStatus.PARTIAL])
     ).scalar() or 0
 
     return DashboardStats(
@@ -33,30 +35,33 @@ def get_stats(db: Session = Depends(get_db)):
 
 @router.get("/charts", response_model=ChartData)
 def get_charts(db: Session = Depends(get_db)):
+    # Sales by Product (item)
     product_rows = (
-        db.query(Record.product, func.sum(Record.price).label("total"))
-        .group_by(Record.product)
-        .order_by(func.sum(Record.price).desc())
+        db.query(Sale.item, func.sum(Sale.grand_total).label("total"))
+        .group_by(Sale.item)
+        .order_by(func.sum(Sale.grand_total).desc())
         .limit(10)
         .all()
     )
-    sales_by_product = [ChartDataPoint(name=r.product, value=r.total or 0) for r in product_rows]
+    sales_by_product = [ChartDataPoint(name=r.item, value=r.total or 0) for r in product_rows]
 
+    # Payment Status distribution
     payment_rows = (
-        db.query(Record.payment_status, func.count(Record.id).label("cnt"))
-        .group_by(Record.payment_status)
+        db.query(Sale.payment_status, func.count(Sale.id).label("cnt"))
+        .group_by(Sale.payment_status)
         .all()
     )
-    payment_status = [ChartDataPoint(name=r.payment_status, value=r.cnt or 0) for r in payment_rows]
+    payment_status = [ChartDataPoint(name=str(r.payment_status.value), value=r.cnt or 0) for r in payment_rows]
 
+    # Monthly Trend
     monthly_rows = (
         db.query(
-            func.date_format(Record.date, "%b %Y").label("month"),
-            func.sum(Record.price).label("revenue"),
-            func.count(Record.id).label("orders"),
+            func.date_format(Sale.created_at, "%b %Y").label("month"),
+            func.sum(Sale.grand_total).label("revenue"),
+            func.count(Sale.id).label("orders"),
         )
-        .group_by(func.date_format(Record.date, "%b %Y"), func.date_format(Record.date, "%Y%m"))
-        .order_by(func.date_format(Record.date, "%Y%m"))
+        .group_by(func.date_format(Sale.created_at, "%b %Y"))
+        .order_by(func.min(Sale.created_at))
         .limit(12)
         .all()
     )
@@ -75,8 +80,8 @@ def get_charts(db: Session = Depends(get_db)):
 @router.get("/recent-sales", response_model=List[RecentSale])
 def get_recent_sales(limit: int = 6, db: Session = Depends(get_db)):
     rows = (
-        db.query(Record)
-        .order_by(Record.date.desc())
+        db.query(Sale)
+        .order_by(Sale.created_at.desc())
         .limit(limit)
         .all()
     )
@@ -84,11 +89,11 @@ def get_recent_sales(limit: int = 6, db: Session = Depends(get_db)):
         RecentSale(
             id=r.id,
             client_name=r.client_name,
-            product=r.product,
-            price=r.price,
-            payment_status=r.payment_status,
-            delivery_status=r.delivery_status,
-            date=r.date.isoformat() if r.date else "",
+            product=r.item,
+            price=r.grand_total,
+            payment_status=str(r.payment_status.value),
+            delivery_status="Delivered",
+            date=r.created_at.isoformat() if r.created_at else "",
             invoice_number=r.invoice_number,
         )
         for r in rows
