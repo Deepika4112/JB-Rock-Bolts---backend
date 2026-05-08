@@ -663,7 +663,7 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
           <td class="lbl">Invoice No.</td>
           <td class="val">{inv_no}</td>
           <td class="lbl">e-Way Bill No.</td>
-          <td class="val">—</td>
+          <td class="val">{sale.e_way_bill_no or '—'}</td>
         </tr>
         <tr>
           <td class="lbl">Delivery Note</td>

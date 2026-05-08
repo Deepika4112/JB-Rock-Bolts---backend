@@ -46,6 +46,7 @@ def get_report(
             location=s.project or "—",
             po_number=s.po_number,
             invoice_number=s.invoice_number,
+            e_way_bill_no=s.e_way_bill_no,
             price=s.grand_total,
             payment_status=s.payment_status.value if hasattr(s.payment_status, 'value') else str(s.payment_status),
             delivery_status="Dispatched",

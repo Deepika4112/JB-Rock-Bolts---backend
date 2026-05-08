@@ -194,10 +194,12 @@ class Sale(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     updated_by = Column(String(100), nullable=True)
     invoice_url = Column(String(500), nullable=True)
+    e_way_bill_url = Column(String(500), nullable=True)
     dispatch_from = Column(Text, nullable=True)
     ship_to = Column(Text, nullable=True)
     bill_to = Column(Text, nullable=True)
     dispatched_through = Column(String(200), nullable=True)
+    e_way_bill_no = Column(String(100), nullable=True)
     buyers_order_no = Column(String(100), nullable=True)
     payment_terms = Column(String(200), nullable=True)
 
