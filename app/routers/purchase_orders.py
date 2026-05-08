@@ -167,5 +167,20 @@ def delete_purchase_order(po_id: int, db: Session = Depends(get_db)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found.")
-    db.delete(po)
-    db.commit()
+    
+    # Check if there are linked sales before deleting
+    if po.sales:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete this Purchase Order because it has linked Sales/Invoices. Please delete the sales records first."
+        )
+
+    try:
+        db.delete(po)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete this Purchase Order due to database constraints (linked records exist)."
+        )

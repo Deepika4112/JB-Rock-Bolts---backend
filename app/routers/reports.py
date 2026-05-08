@@ -26,8 +26,9 @@ def get_report(
         from datetime import time
         to_date_end = datetime.combine(to_date.date(), time(23, 59, 59))
         q = q.filter(Sale.created_at <= to_date_end)
-    if product and product.lower() != "all":
-        q = q.filter(Sale.item.ilike(f"%{product}%"))
+    if product:
+        from app.models.models import SaleItem
+        q = q.join(Sale.items).filter(SaleItem.item.ilike(f"%{product}%"))
     if client and client.lower() != "all":
         q = q.filter(Sale.client_name.ilike(f"%{client}%"))
 
@@ -42,7 +43,7 @@ def get_report(
             id=s.id,
             date=s.created_at.strftime("%d-%m-%Y") if s.created_at else "",
             client_name=s.client_name,
-            product=s.item,
+            product=s.items_display,
             location=s.project or "—",
             po_number=s.po_number,
             invoice_number=s.invoice_number,
@@ -87,7 +88,7 @@ def get_fulfillment_report(
             date=o.created_at.strftime("%d-%m-%Y") if o.created_at else "—",
             client_name=o.client_name,
             project=o.project or "—",
-            item=o.item,
+            item=o.items_display,
             total_required=o.total_quantity,
             delivered=o.delivered_quantity,
             pending=max(0, o.total_quantity - o.delivered_quantity),

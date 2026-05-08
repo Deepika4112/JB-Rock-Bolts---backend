@@ -35,11 +35,11 @@ def get_stats(db: Session = Depends(get_db)):
 
 @router.get("/charts", response_model=ChartData)
 def get_charts(db: Session = Depends(get_db)):
-    # Sales by Product (item)
+    from app.models.models import SaleItem
     product_rows = (
-        db.query(Sale.item, func.sum(Sale.grand_total).label("total"))
-        .group_by(Sale.item)
-        .order_by(func.sum(Sale.grand_total).desc())
+        db.query(SaleItem.item, func.sum(SaleItem.total_amount).label("total"))
+        .group_by(SaleItem.item)
+        .order_by(func.sum(SaleItem.total_amount).desc())
         .limit(10)
         .all()
     )
@@ -89,7 +89,7 @@ def get_recent_sales(limit: int = 6, db: Session = Depends(get_db)):
         RecentSale(
             id=r.id,
             client_name=r.client_name,
-            product=r.item,
+            product=r.items_display,
             price=r.grand_total,
             payment_status=str(r.payment_status.value),
             delivery_status="Delivered",

@@ -159,6 +159,7 @@ class POLineItem(Base):
     po_id = Column(Integer, ForeignKey("purchase_orders.id"), nullable=False)
     item = Column(String(300), nullable=False)
     quantity = Column(Float, nullable=False, default=0)
+    delivered_quantity = Column(Float, nullable=False, default=0)
     uom = Column(String(50), nullable=False, default="Nos")
     unit_price = Column(Float, nullable=False, default=0)
 
@@ -173,18 +174,14 @@ class Sale(Base):
     po_number = Column(String(100), nullable=False, index=True)
     invoice_number = Column(String(50), nullable=True, unique=True, index=True)
     client_name = Column(String(200), nullable=False, index=True)
-    item = Column(String(300), nullable=False)
     project = Column(String(300), nullable=True)
-    uom = Column(String(50), nullable=False, default="Nos")
-    dispatched_qty = Column(Float, nullable=False, default=0)
-    total_qty = Column(Float, nullable=False, default=0)
-    previous_delivered = Column(Float, nullable=False, default=0)
-    unit_price = Column(Float, nullable=False, default=0)
-    gst_rate = Column(Float, nullable=False, default=18)
+    
+    # Financials (Aggregate)
+    subtotal = Column(Float, nullable=False, default=0)
     gst_amount = Column(Float, nullable=False, default=0)
     freight = Column(Float, nullable=False, default=0)
-    subtotal = Column(Float, nullable=False, default=0)
     grand_total = Column(Float, nullable=False, default=0)
+    
     payment_status = Column(
         Enum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False
     )
@@ -203,11 +200,38 @@ class Sale(Base):
     buyers_order_no = Column(String(100), nullable=True)
     payment_terms = Column(String(200), nullable=True)
     hsn_code = Column(String(50), nullable=True)
+    
+    @property
+    def items_display(self) -> str:
+        if self.items:
+            return ", ".join(i.item for i in self.items)
+        return ""
 
     purchase_order = relationship("PurchaseOrder", back_populates="sales")
+    items = relationship("SaleItem", back_populates="sale", cascade="all, delete-orphan")
     activities = relationship(
         "SaleActivity", back_populates="sale", cascade="all, delete-orphan"
     )
+
+class SaleItem(Base):
+    __tablename__ = "sale_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sale_id = Column(Integer, ForeignKey("sales.id"), nullable=False)
+    line_item_id = Column(Integer, ForeignKey("po_line_items.id"), nullable=True)
+    
+    item = Column(String(300), nullable=False)
+    uom = Column(String(50), nullable=False, default="Nos")
+    quantity = Column(Float, nullable=False, default=0)
+    unit_price = Column(Float, nullable=False, default=0)
+    gst_rate = Column(Float, nullable=False, default=18)
+    
+    # Pre-calculated totals for this item
+    subtotal = Column(Float, nullable=False, default=0)
+    gst_amount = Column(Float, nullable=False, default=0)
+    total_amount = Column(Float, nullable=False, default=0)
+
+    sale = relationship("Sale", back_populates="items")
 
 
 class SaleActivity(Base):

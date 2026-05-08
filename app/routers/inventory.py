@@ -25,9 +25,10 @@ def _to_out(product: Product, sales_count: int = 0) -> ProductOut:
 @router.get("", response_model=List[ProductOut])
 def list_inventory(db: Session = Depends(get_db)):
     products = db.query(Product).order_by(Product.name).all()
+    from app.models.models import SaleItem
     sales_counts = (
-        db.query(Sale.item, func.count(Sale.id).label("cnt"))
-        .group_by(Sale.item)
+        db.query(SaleItem.item, func.count(SaleItem.id).label("cnt"))
+        .group_by(SaleItem.item)
         .all()
     )
     count_map = {r.item: r.cnt for r in sales_counts}
