@@ -16,6 +16,7 @@ class PaymentStatus(str, enum.Enum):
 class DeliveryStatus(str, enum.Enum):
     PENDING = "Pending"
     DELIVERED = "Delivered"
+    PARTIAL = "Partial"
 
 
 class InventoryStatus(str, enum.Enum):
@@ -200,6 +201,9 @@ class Sale(Base):
     dispatched_through = Column(String(200), nullable=True)
     buyers_order_no = Column(String(100), nullable=True)
     payment_terms = Column(String(200), nullable=True)
+    # Delivery tracking
+    delivery_status = Column(String(50), nullable=False, default="Pending", server_default="Pending")
+    delivery_challan_url = Column(String(500), nullable=True)
 
     purchase_order = relationship("PurchaseOrder", back_populates="sales")
     activities = relationship(
@@ -244,3 +248,15 @@ class Record(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     client_rel = relationship("Client", back_populates="records")
+
+
+class SystemLog(Base):
+    __tablename__ = "system_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String(200), nullable=False)
+    entity_type = Column(String(100), nullable=False)
+    entity_id = Column(Integer, nullable=True)
+    details = Column(Text, nullable=True)
+    user = Column(String(100), nullable=True)
+    created_at = Column(DateTime, server_default=func.now())

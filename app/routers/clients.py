@@ -5,6 +5,7 @@ from typing import List, Optional
 from app.database import get_db
 from app.models.models import Client, PurchaseOrder, Record
 from app.schemas.client import ClientCreate, ClientOut
+from app.utils.helpers import log_activity
 
 router = APIRouter(prefix="/api/clients", tags=["Clients"])
 
@@ -49,6 +50,7 @@ def create_client(payload: ClientCreate, db: Session = Depends(get_db)):
     db.add(client)
     db.commit()
     db.refresh(client)
+    log_activity(db, "Client Created", "Client", f"Created client {client.name}.", "System/Admin", client.id)
     return ClientOut(
         id=client.id,
         name=client.name,
@@ -64,5 +66,7 @@ def delete_client(client_id: int, db: Session = Depends(get_db)):
     client = db.get(Client, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Client not found.")
+    name = client.name
     db.delete(client)
     db.commit()
+    log_activity(db, "Client Deleted", "Client", f"Deleted client {name}.", "System/Admin", client_id)

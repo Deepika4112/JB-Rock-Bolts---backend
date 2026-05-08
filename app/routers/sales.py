@@ -1,14 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 import shutil
 import os
 import uuid
+from pydantic import BaseModel
 from app.database import get_db
 from app.models.models import Sale, SaleActivity, PurchaseOrder
 from app.schemas.sale import SaleCreate, SaleUpdate, SaleOut, SaleActivityCreate, SaleActivityOut
-from app.utils.helpers import generate_invoice_number, compute_sale_financials
+from app.utils.helpers import generate_invoice_number, compute_sale_financials, log_activity
+
+
+class MarkDeliveredPayload(BaseModel):
+    delivery_challan_url: str
+    updated_by: Optional[str] = None
 
 router = APIRouter(prefix="/api/sales", tags=["Sales"])
 
@@ -85,7 +91,6 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
         bill_to=payload.bill_to,
         dispatched_through=payload.dispatched_through,
         buyers_order_no=payload.buyers_order_no,
-        payment_terms=payload.payment_terms,
         created_by=payload.created_by,
         **financials,
     )
@@ -105,6 +110,8 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
     db.add(activity)
     db.commit()
     db.refresh(sale)
+    
+    log_activity(db, "Sale Created", "Sale", f"Created sale invoice {sale.invoice_number} for {po.client_name}.", payload.created_by, sale.id)
     return sale
 
 
@@ -165,6 +172,45 @@ def update_sale(sale_id: int, payload: SaleUpdate, db: Session = Depends(get_db)
 
     db.commit()
     db.refresh(sale)
+    
+    log_activity(db, "Sale Updated", "Sale", f"Updated sale invoice {sale.invoice_number}.", updated_by, sale.id)
+    return sale
+
+
+@router.put("/{sale_id}/mark-delivered", response_model=SaleOut)
+def mark_delivered(
+    sale_id: int,
+    payload: MarkDeliveredPayload,
+    db: Session = Depends(get_db),
+):
+    """Mark a sale as Delivered. Requires delivery_challan_url to be supplied."""
+    sale = db.get(Sale, sale_id)
+    if not sale:
+        raise HTTPException(status_code=404, detail="Sale not found.")
+
+    challan_url = payload.delivery_challan_url or sale.delivery_challan_url
+    if not challan_url:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A delivery challan document must be uploaded before marking as Delivered.",
+        )
+
+    sale.delivery_status = "Delivered"
+    sale.delivery_challan_url = challan_url
+    sale.updated_by = payload.updated_by
+    sale.updated_at = datetime.utcnow()
+
+    activity = SaleActivity(
+        sale_id=sale.id,
+        action="Marked Delivered",
+        note="Sale marked as delivered with challan document.",
+        payment_status=sale.payment_status.value if hasattr(sale.payment_status, 'value') else str(sale.payment_status),
+        by=payload.updated_by,
+    )
+    db.add(activity)
+    db.commit()
+    db.refresh(sale)
+    log_activity(db, "Sale Marked Delivered", "Sale", f"Sale invoice {sale.invoice_number} marked as Delivered.", payload.updated_by, sale.id)
     return sale
 
 
@@ -180,6 +226,7 @@ def delete_sale(sale_id: int, db: Session = Depends(get_db)):
 
     db.delete(sale)
     db.commit()
+    log_activity(db, "Sale Deleted", "Sale", f"Deleted sale invoice for {sale.client_name}.", "System/Admin", sale_id)
 
 
 @router.post("/{sale_id}/activities", response_model=SaleActivityOut, status_code=status.HTTP_201_CREATED)

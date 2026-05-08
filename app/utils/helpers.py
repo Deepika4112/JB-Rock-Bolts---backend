@@ -34,3 +34,28 @@ def derive_inventory_status(quantity: int) -> str:
     if quantity < 100:
         return InventoryStatus.LOW_STOCK
     return InventoryStatus.IN_STOCK
+
+
+def log_activity(
+    db: Session,
+    action: str,
+    entity_type: str,
+    details: str,
+    user: str,
+    entity_id: int = None,
+):
+    from app.models.models import SystemLog
+    try:
+        log_entry = SystemLog(
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            details=details,
+            user=user
+        )
+        db.add(log_entry)
+        db.commit()
+    except Exception as e:
+        # We don't want logging failures to break the main application flow
+        print(f"Failed to log activity: {e}")
+        db.rollback()

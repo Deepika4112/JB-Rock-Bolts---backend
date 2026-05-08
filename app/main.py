@@ -20,6 +20,7 @@ from app.routers import users
 from app.routers import constants
 from app.routers import documents
 from app.routers import projects
+from app.routers import logs
 
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
@@ -157,6 +158,7 @@ app.include_router(reports.router)
 app.include_router(users.router)
 app.include_router(documents.router)
 app.include_router(projects.router)
+app.include_router(logs.router)
 
 
 @app.get("/", tags=["Health"])

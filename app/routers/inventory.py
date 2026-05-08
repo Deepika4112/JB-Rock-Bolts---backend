@@ -5,7 +5,8 @@ from typing import List
 from app.database import get_db
 from app.models.models import Product, Sale
 from app.schemas.product import ProductCreate, ProductUpdate, ProductOut
-from app.utils.helpers import derive_inventory_status
+from app.schemas.product import ProductCreate, ProductUpdate, ProductOut
+from app.utils.helpers import derive_inventory_status, log_activity
 
 router = APIRouter(prefix="/api/inventory", tags=["Inventory"])
 
@@ -72,5 +73,7 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
     product = db.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found.")
+    name = product.name
     db.delete(product)
     db.commit()
+    log_activity(db, "Product Deleted", "Product", f"Deleted product {name}.", "System/Admin", product_id)

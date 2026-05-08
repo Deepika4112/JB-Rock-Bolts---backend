@@ -6,6 +6,7 @@ from app.database import get_db
 from app.models.models import User
 from app.schemas.user import UserCreate, UserUpdate, UserOut, UserLogin, Token
 from app.config import settings
+from app.utils.helpers import log_activity
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
@@ -45,6 +46,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+    
+    log_activity(db, "User Registered", "User", f"New user {user.name} registered.", user.name, user.id)
     return user
 
 
@@ -57,6 +60,7 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password.",
         )
     token = create_access_token(user.id)
+    log_activity(db, "User Logged In", "User", f"User {user.name} logged in.", user.name, user.id)
     return Token(access_token=token, user=UserOut.model_validate(user))
 
 
@@ -78,4 +82,5 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         user.hashed_password = hash_password(payload.password)
     db.commit()
     db.refresh(user)
+    log_activity(db, "User Updated", "User", f"User {user.name} was updated.", "System/Admin", user.id)
     return user

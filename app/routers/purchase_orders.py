@@ -9,6 +9,7 @@ import uuid
 from app.database import get_db
 from app.models.models import PurchaseOrder, POLineItem
 from app.schemas.purchase_order import PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderOut
+from app.utils.helpers import log_activity
 
 router = APIRouter(prefix="/api/purchase-orders", tags=["Purchase Orders"])
 
@@ -115,6 +116,8 @@ def create_purchase_order(payload: PurchaseOrderCreate, db: Session = Depends(ge
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Purchase order with PO# '{payload.po_number}' already exists.",
         )
+        
+    log_activity(db, "PO Created", "PurchaseOrder", f"Created PO {po.po_number} for {po.client_name}.", payload.created_by or "System", po.id)
     return _to_out(po)
 
 
@@ -159,6 +162,8 @@ def update_purchase_order(po_id: int, payload: PurchaseOrderUpdate, db: Session 
     po.last_updated_at = datetime.utcnow()
     db.commit()
     db.refresh(po)
+    
+    log_activity(db, "PO Updated", "PurchaseOrder", f"Updated PO {po.po_number}.", po.last_updated_by or "System", po.id)
     return _to_out(po)
 
 
@@ -167,5 +172,8 @@ def delete_purchase_order(po_id: int, db: Session = Depends(get_db)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found.")
+    po_num = po.po_number
+    client = po.client_name
     db.delete(po)
     db.commit()
+    log_activity(db, "PO Deleted", "PurchaseOrder", f"Deleted PO {po_num} for {client}.", "System/Admin", po_id)

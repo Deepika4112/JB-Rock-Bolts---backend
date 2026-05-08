@@ -60,6 +60,9 @@ class SaleUpdate(BaseModel):
     dispatched_through: Optional[str] = None
     buyers_order_no: Optional[str] = None
     payment_terms: Optional[str] = None
+    invoice_number: Optional[str] = None
+    delivery_status: Optional[str] = None
+    delivery_challan_url: Optional[str] = None
     updated_by: Optional[str] = None
 
 
@@ -94,6 +97,8 @@ class SaleOut(BaseModel):
     dispatched_through: Optional[str]
     buyers_order_no: Optional[str]
     payment_terms: Optional[str]
+    delivery_status: str = "Pending"
+    delivery_challan_url: Optional[str] = None
     activities: List[SaleActivityOut] = []
 
     model_config = {"from_attributes": True}

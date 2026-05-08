@@ -4,6 +4,7 @@ from typing import List
 from app.database import get_db
 from app.models.models import Project, Client
 from app.schemas.project import ProjectCreate, ProjectOut
+from app.utils.helpers import log_activity
 
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 
@@ -33,6 +34,7 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)):
     db.add(project)
     db.commit()
     db.refresh(project)
+    log_activity(db, "Project Created", "Project", f"Created project {project.name} for client {client.name}.", "System/Admin", project.id)
     return project
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -40,5 +42,7 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
+    name = project.name
     db.delete(project)
     db.commit()
+    log_activity(db, "Project Deleted", "Project", f"Deleted project {name}.", "System/Admin", project_id)
