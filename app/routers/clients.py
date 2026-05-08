@@ -10,13 +10,17 @@ from app.utils.helpers import log_activity
 router = APIRouter(prefix="/api/clients", tags=["Clients"])
 
 
+from sqlalchemy.exc import IntegrityError
+
 @router.get("", response_model=List[ClientOut])
 def list_clients(location: Optional[str] = None, db: Session = Depends(get_db)):
+    from app.models.models import Sale
     q = db.query(Client)
     if location:
         q = q.filter(Client.location.ilike(f"%{location}%"))
     clients = q.order_by(Client.name).all()
 
+    # Map order counts from PurchaseOrders
     order_counts = (
         db.query(PurchaseOrder.client_name, func.count(PurchaseOrder.id).label("cnt"))
         .group_by(PurchaseOrder.client_name)
@@ -24,9 +28,10 @@ def list_clients(location: Optional[str] = None, db: Session = Depends(get_db)):
     )
     order_map = {r.client_name: r.cnt for r in order_counts}
 
+    # Map revenue from Sales (real invoices)
     revenue = (
-        db.query(Record.client_name, func.sum(Record.price).label("total"))
-        .group_by(Record.client_name)
+        db.query(Sale.client_name, func.sum(Sale.grand_total).label("total"))
+        .group_by(Sale.client_name)
         .all()
     )
     revenue_map = {r.client_name: r.total or 0 for r in revenue}
@@ -46,7 +51,10 @@ def list_clients(location: Optional[str] = None, db: Session = Depends(get_db)):
 
 @router.post("", response_model=ClientOut, status_code=status.HTTP_201_CREATED)
 def create_client(payload: ClientCreate, db: Session = Depends(get_db)):
-    client = Client(name=payload.name, location=payload.location)
+    client = Client(
+        name=payload.name, 
+        location=payload.location,
+    )
     db.add(client)
     db.commit()
     db.refresh(client)
@@ -66,7 +74,13 @@ def delete_client(client_id: int, db: Session = Depends(get_db)):
     client = db.get(Client, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Client not found.")
-    name = client.name
-    db.delete(client)
-    db.commit()
-    log_activity(db, "Client Deleted", "Client", f"Deleted client {name}.", "System/Admin", client_id)
+    
+    try:
+        db.delete(client)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete client because it has linked Purchase Orders or Sales. Please delete them first."
+        )

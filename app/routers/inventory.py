@@ -26,9 +26,10 @@ def _to_out(product: Product, sales_count: int = 0) -> ProductOut:
 @router.get("", response_model=List[ProductOut])
 def list_inventory(db: Session = Depends(get_db)):
     products = db.query(Product).order_by(Product.name).all()
+    from app.models.models import SaleItem
     sales_counts = (
-        db.query(Sale.item, func.count(Sale.id).label("cnt"))
-        .group_by(Sale.item)
+        db.query(SaleItem.item, func.count(SaleItem.id).label("cnt"))
+        .group_by(SaleItem.item)
         .all()
     )
     count_map = {r.item: r.cnt for r in sales_counts}
@@ -57,14 +58,26 @@ def update_product(product_id: int, payload: ProductUpdate, db: Session = Depend
     if not product:
         raise HTTPException(status_code=404, detail="Product not found.")
 
-    if payload.quantity is not None:
+    changed_fields = []
+    if payload.quantity is not None and product.quantity != payload.quantity:
+        changed_fields.append("quantity")
         product.quantity = payload.quantity
-        product.status = payload.status or derive_inventory_status(payload.quantity)
-    elif payload.status is not None:
+        new_status = payload.status or derive_inventory_status(payload.quantity)
+        if product.status != new_status:
+            changed_fields.append("status")
+            product.status = new_status
+    elif payload.status is not None and product.status != payload.status:
+        changed_fields.append("status")
         product.status = payload.status
 
     db.commit()
     db.refresh(product)
+    
+    details_str = f"Updated product {product.name}."
+    if changed_fields:
+        details_str += f" Changed fields: {', '.join(changed_fields)}"
+        
+    log_activity(db, "Product Updated", "Product", details_str, "System/Admin", product.id)
     return _to_out(product)
 
 

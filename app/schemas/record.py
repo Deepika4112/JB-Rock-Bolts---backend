@@ -10,7 +10,7 @@ class RecordCreate(BaseModel):
     price: float
     location: Optional[str] = None
     payment_status: PaymentStatus = PaymentStatus.PENDING
-    delivery_status: DeliveryStatus = DeliveryStatus.PENDING
+    delivery_status: DeliveryStatus = DeliveryStatus.NOT_DELIVERED
     po_number: Optional[str] = None
     invoice_number: Optional[str] = None
     date: Optional[datetime] = None

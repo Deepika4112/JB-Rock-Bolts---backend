@@ -7,14 +7,15 @@ import os
 import uuid
 from pydantic import BaseModel
 from app.database import get_db
-from app.models.models import Sale, SaleActivity, PurchaseOrder
-from app.schemas.sale import SaleCreate, SaleUpdate, SaleOut, SaleActivityCreate, SaleActivityOut
 from app.utils.helpers import generate_invoice_number, compute_sale_financials, log_activity
 
 
 class MarkDeliveredPayload(BaseModel):
     delivery_challan_url: str
     updated_by: Optional[str] = None
+from app.models.models import Sale, SaleActivity, PurchaseOrder, SaleItem, POLineItem
+from app.schemas.sale import SaleCreate, SaleUpdate, SaleOut, SaleActivityCreate, SaleActivityOut, SaleItemCreate
+# from app.utils.helpers import generate_invoice_number
 
 router = APIRouter(prefix="/api/sales", tags=["Sales"])
 
@@ -57,16 +58,6 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found.")
 
-    if payload.dispatched_qty > po.pending_quantity:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Dispatched qty ({payload.dispatched_qty}) exceeds pending qty ({po.pending_quantity}).",
-        )
-
-    financials = compute_sale_financials(
-        payload.dispatched_qty, payload.unit_price, payload.gst_rate, payload.freight
-    )
-
     invoice_number = payload.invoice_number or generate_invoice_number(db)
 
     sale = Sale(
@@ -74,31 +65,49 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
         po_number=payload.po_number,
         invoice_number=invoice_number,
         client_name=payload.client_name,
-        item=payload.item,
         project=payload.project,
-        uom=payload.uom,
-        dispatched_qty=payload.dispatched_qty,
-        total_qty=payload.total_qty,
-        previous_delivered=payload.previous_delivered,
-        unit_price=payload.unit_price,
-        gst_rate=payload.gst_rate,
+        subtotal=payload.subtotal,
+        gst_amount=payload.gst_amount,
         freight=payload.freight,
+        grand_total=payload.grand_total,
         payment_status=payload.payment_status,
         payment_note=payload.payment_note,
         invoice_url=payload.invoice_url,
+        e_way_bill_url=payload.e_way_bill_url,
         dispatch_from=payload.dispatch_from,
         ship_to=payload.ship_to,
         bill_to=payload.bill_to,
         dispatched_through=payload.dispatched_through,
+        e_way_bill_no=payload.e_way_bill_no,
         buyers_order_no=payload.buyers_order_no,
+        payment_terms=payload.payment_terms,
+        hsn_code=payload.hsn_code,
         created_by=payload.created_by,
-        **financials,
     )
     db.add(sale)
-
-    po.delivered_quantity += payload.dispatched_qty
-
     db.flush()
+
+    for item_data in payload.items:
+        sale_item = SaleItem(
+            sale_id=sale.id,
+            line_item_id=item_data.line_item_id,
+            item=item_data.item,
+            uom=item_data.uom,
+            quantity=item_data.quantity,
+            unit_price=item_data.unit_price,
+            gst_rate=item_data.gst_rate,
+            subtotal=item_data.subtotal,
+            gst_amount=item_data.gst_amount,
+            total_amount=item_data.total_amount,
+        )
+        db.add(sale_item)
+
+        # Update delivery tracking
+        po.delivered_quantity += item_data.quantity
+        if item_data.line_item_id:
+            li = db.get(POLineItem, item_data.line_item_id)
+            if li:
+                li.delivered_quantity += item_data.quantity
 
     activity = SaleActivity(
         sale_id=sale.id,
@@ -129,38 +138,20 @@ def update_sale(sale_id: int, payload: SaleUpdate, db: Session = Depends(get_db)
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found.")
 
-    updates = payload.model_dump(exclude_none=True)
+    updates = payload.model_dump(exclude_unset=True)
     updated_by = updates.pop("updated_by", None)
 
-    # Handle dispatched_qty change
-    if "dispatched_qty" in updates:
-        new_qty = updates["dispatched_qty"]
-        diff = new_qty - sale.dispatched_qty
-        
-        po = db.get(PurchaseOrder, sale.po_id)
-        if po:
-            # Check if new quantity exceeds PO total
-            if (po.delivered_quantity + diff) > po.total_quantity:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"Updated quantity exceeds PO total. Available: {po.total_quantity - (po.delivered_quantity - sale.dispatched_qty)}"
-                )
-            po.delivered_quantity += diff
-        
-        # Recalculate financials
-        financials = compute_sale_financials(
-            new_qty, sale.unit_price, sale.gst_rate, sale.freight
-        )
-        for field, value in financials.items():
-            setattr(sale, field, value)
-
+    changed_fields = []
     for field, value in updates.items():
-        setattr(sale, field, value)
+        old_val = getattr(sale, field, None)
+        if old_val != value:
+            changed_fields.append(field)
+            setattr(sale, field, value)
 
     sale.updated_by = updated_by
     sale.updated_at = datetime.utcnow()
 
-    if "payment_status" in updates:
+    if "payment_status" in changed_fields:
         activity = SaleActivity(
             sale_id=sale.id,
             action="Payment Status Updated",
@@ -173,7 +164,11 @@ def update_sale(sale_id: int, payload: SaleUpdate, db: Session = Depends(get_db)
     db.commit()
     db.refresh(sale)
     
-    log_activity(db, "Sale Updated", "Sale", f"Updated sale invoice {sale.invoice_number}.", updated_by, sale.id)
+    details_str = f"Updated sale invoice {sale.invoice_number}."
+    if changed_fields:
+        details_str += f" Changed fields: {', '.join(changed_fields)}"
+    
+    log_activity(db, "Sale Updated", "Sale", details_str, updated_by or "System", sale.id)
     return sale
 
 
@@ -221,8 +216,15 @@ def delete_sale(sale_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Sale not found.")
 
     po = db.get(PurchaseOrder, sale.po_id)
-    if po:
-        po.delivered_quantity = max(0, po.delivered_quantity - sale.dispatched_qty)
+    
+    # Rollback quantities for all items in this sale
+    for item in sale.items:
+        if po:
+            po.delivered_quantity = max(0, po.delivered_quantity - item.quantity)
+        if item.line_item_id:
+            li = db.get(POLineItem, item.line_item_id)
+            if li:
+                li.delivered_quantity = max(0, li.delivered_quantity - item.quantity)
 
     db.delete(sale)
     db.commit()

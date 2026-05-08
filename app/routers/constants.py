@@ -19,7 +19,7 @@ PRODUCTS = [
     "JB-19 H Type RE-BAR Couplers",
 ]
 
-UOM_OPTIONS = ["Nos", "MT", "Kg", "Ton", "Set", "Meter", "Sqm", "Cum", "Ltr", "Box", "Unit"]
+UOM_OPTIONS = ["Nos", "MT", "Kg", "Ton", "Set", "Meter", "Sqm", "Cum", "Ltr", "Box", "Unit", "ZNS"]
 
 LOCATIONS = [
     "Delhi", "Mumbai", "Pune", "Bengaluru", "Chennai",
@@ -107,6 +107,6 @@ def get_constants(db: Session = Depends(get_db)):
         "payment_terms": PAYMENT_TERMS,
         "clients": all_clients,
         "payment_statuses": ["Pending", "Partial", "Paid"],
-        "delivery_statuses": ["Pending", "Delivered"],
+        "delivery_statuses": ["Not Delivered", "Delivered"],
         "inventory_statuses": ["In Stock", "Low Stock", "Out of Stock"],
     }

@@ -18,6 +18,7 @@ class ReportRow(BaseModel):
     location: Optional[str]
     po_number: Optional[str]
     invoice_number: Optional[str]
+    e_way_bill_no: Optional[str] = None
     price: float
     payment_status: str
     delivery_status: str

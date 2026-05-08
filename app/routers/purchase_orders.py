@@ -140,12 +140,17 @@ def update_purchase_order(po_id: int, payload: PurchaseOrderUpdate, db: Session 
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found.")
 
-    update_data = payload.model_dump(exclude_none=True, exclude={"line_items"})
+    update_data = payload.model_dump(exclude_unset=True, exclude={"line_items"})
+    changed_fields = []
     for field, value in update_data.items():
-        setattr(po, field, value)
+        old_val = getattr(po, field, None)
+        if old_val != value:
+            changed_fields.append(field)
+            setattr(po, field, value)
 
     # If line_items are provided, replace them
     if payload.line_items is not None:
+        changed_fields.append("line_items")
         # Clear existing
         po.line_items.clear()
         # Add new
@@ -163,7 +168,11 @@ def update_purchase_order(po_id: int, payload: PurchaseOrderUpdate, db: Session 
     db.commit()
     db.refresh(po)
     
-    log_activity(db, "PO Updated", "PurchaseOrder", f"Updated PO {po.po_number}.", po.last_updated_by or "System", po.id)
+    details_str = f"Updated PO {po.po_number}."
+    if changed_fields:
+        details_str += f" Changed fields: {', '.join(changed_fields)}"
+    
+    log_activity(db, "PO Updated", "PurchaseOrder", details_str, po.last_updated_by or "System", po.id)
     return _to_out(po)
 
 
@@ -172,8 +181,20 @@ def delete_purchase_order(po_id: int, db: Session = Depends(get_db)):
     po = db.get(PurchaseOrder, po_id)
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found.")
-    po_num = po.po_number
-    client = po.client_name
-    db.delete(po)
-    db.commit()
-    log_activity(db, "PO Deleted", "PurchaseOrder", f"Deleted PO {po_num} for {client}.", "System/Admin", po_id)
+    
+    # Check if there are linked sales before deleting
+    if po.sales:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete this Purchase Order because it has linked Sales/Invoices. Please delete the sales records first."
+        )
+
+    try:
+        db.delete(po)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete this Purchase Order due to database constraints (linked records exist)."
+        )

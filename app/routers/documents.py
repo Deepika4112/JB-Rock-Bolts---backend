@@ -11,8 +11,6 @@ SELLER = {
     "name": "RE BAR COUPLER INDIA PRIVATE LIMITED",
     "address1": "10B, Block 23, Industrial Area, Nangal Jarialan",
     "address2": "Distt. Una, Himachal Pradesh 177212",
-    "state": "Himachal Pradesh",
-    "gstin": "02AAFCR5621L1ZG",
     "contact": "+91-9679830468",
     "email": "info@jbrockbolts.com",
 }
@@ -240,8 +238,6 @@ def get_po_document(po_id: int, db: Session = Depends(get_db)):
       <div class="addr-company">{SELLER['name']}</div>
       <div>{SELLER['address1']}</div>
       <div>{SELLER['address2']}</div>
-      <div>{SELLER['state']}</div>
-      <div><b>GSTIN:</b> {SELLER['gstin']}</div>
     </div>
     <div class="addr-cell">
       <div class="addr-label">Ship To:</div>
@@ -445,29 +441,55 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found.")
 
-    # Load linked PO for extra fields
+    # Load linked PO and Client for extra fields
     po = db.get(PurchaseOrder, sale.po_id) if sale.po_id else None
+    client = po.client_rel if po else None
 
-    total_delivered = (sale.previous_delivered or 0) + sale.dispatched_qty
-    pending_qty     = max(0, sale.total_qty - total_delivered)
-    words           = _amount_words(sale.grand_total)
+    # Totals are now aggregate on the Sale model
+    subtotal = sale.subtotal
+    gst_amount = sale.gst_amount
+    freight = sale.freight
+    grand_total = sale.grand_total
+    
+    # Calculate delivered/pending relative to the PO
+    # This is a simplification; ideally we'd track per line item
+    total_delivered = po.delivered_quantity if po else 0
+    pending_qty     = po.pending_quantity if po else 0
+    words           = _amount_words(grand_total)
 
-    gst_rate   = sale.gst_rate
-    igst_rate  = gst_rate
-    cgst_rate  = 0.0
-    sgst_rate  = 0.0
-    igst_amt   = sale.gst_amount
-    cgst_amt   = 0.0
-    sgst_amt   = 0.0
+    # Default to IGST (inter-state) since client state is no longer tracked
+    is_intra_state = False
+    
+    gst_rate   = sale.items[0].gst_rate if sale.items else 18.0
+    if is_intra_state:
+        igst_rate = 0.0
+        igst_amt  = 0.0
+        cgst_rate = gst_rate / 2
+        sgst_rate = gst_rate / 2
+        cgst_amt  = sale.gst_amount / 2
+        sgst_amt  = sale.gst_amount / 2
+    else:
+        igst_rate = gst_rate
+        igst_amt  = sale.gst_amount
+        cgst_rate = 0.0
+        cgst_amt  = 0.0
+        sgst_rate = 0.0
+        sgst_amt  = 0.0
 
     inv_no     = sale.invoice_number or "DRAFT"
     inv_date   = _fmt_date(sale.created_at)
     po_date    = _fmt_date(po.created_at)     if po else "—"
     deliv_date = _fmt_date(sale.updated_at)
-    pay_terms  = (po.payment_terms if po and po.payment_terms else
+    pay_terms  = (sale.payment_terms if sale.payment_terms else
+                  po.payment_terms if po and po.payment_terms else
                   sale.payment_note or "As per discussion")
-    location   = (po.location if po and po.location else "—")
+    location   = (client.location if client and client.location else po.location if po else "—")
     project    = sale.project or "—"
+    ship_to_addr = sale.ship_to or location
+    bill_to_addr = sale.bill_to or sale.client_name
+    dispatched_via = sale.dispatched_through or "—"
+    buyer_order = sale.buyers_order_no or sale.po_number
+    hsn_sac    = sale.hsn_code or "—"
 
     # Fake IRN / Ack for display (real e-Invoice requires GST portal integration)
     import hashlib, time
@@ -649,10 +671,8 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
       <div>Regd. Office: {SELLER['address1']},</div>
       <div>{SELLER['address2']} India</div>
       <div>PLANT ADD.: VPO PALAKWAHA, TEHSIL HAROLI,</div>
-      <div>Una, {SELLER['state']}, 177220</div>
+      <div>Una, 177220</div>
       <div>IEC CODE NO.: 2216900613</div>
-      <div><b>GSTIN/UIN:</b> {SELLER['gstin']}</div>
-      <div>State Name: {SELLER['state']}, Code: 02</div>
       <div>E-Mail: {SELLER['email']}</div>
     </div>
 
@@ -663,7 +683,7 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
           <td class="lbl">Invoice No.</td>
           <td class="val">{inv_no}</td>
           <td class="lbl">e-Way Bill No.</td>
-          <td class="val">—</td>
+          <td class="val">{sale.e_way_bill_no or '—'}</td>
         </tr>
         <tr>
           <td class="lbl">Delivery Note</td>
@@ -681,7 +701,7 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
         </tr>
         <tr>
           <td class="lbl">Buyer's Order No.</td>
-          <td class="val">{sale.po_number}</td>
+          <td class="val">{buyer_order}</td>
           <td class="date-lbl">Dated</td>
           <td class="val">{po_date}</td>
         </tr>
@@ -693,7 +713,7 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
         </tr>
         <tr>
           <td class="lbl">Dispatched through</td>
-          <td colspan="3">—</td>
+          <td colspan="3">{dispatched_via}</td>
         </tr>
         <tr>
           <td class="lbl">Destination</td>
@@ -712,18 +732,12 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
     <div class="party-cell">
       <div class="party-type">Consignee (Ship to)</div>
       <div class="party-name">{sale.client_name}</div>
-      {('<div>' + project + '</div>') if project != '—' else ''}
-      <div>{location}</div>
-      <div><b>GSTIN/UIN</b> : —</div>
-      <div>State Name : —</div>
+      <div style="white-space:pre-line">{ship_to_addr}</div>
     </div>
     <div class="party-cell">
       <div class="party-type">Buyer (Bill to)</div>
       <div class="party-name">{sale.client_name}</div>
-      {('<div>' + project + '</div>') if project != '—' else ''}
-      <div>{location}</div>
-      <div><b>GSTIN/UIN</b> : —</div>
-      <div>State Name : —</div>
+      <div style="white-space:pre-line">{bill_to_addr}</div>
     </div>
   </div>
 
@@ -742,19 +756,22 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
       </tr>
     </thead>
     <tbody>
-      <tr>
-        <td class="ctr">1</td>
-        <td>
-          <b>{sale.item}</b>
-          {('<br/><span style="font-size:10px;color:#555">' + sale.project + '</span>') if sale.project else ''}
-        </td>
-        <td class="ctr">—</td>
-        <td class="num">{_fmt_inr(sale.dispatched_qty)}&nbsp;{sale.uom or 'Nos'}</td>
-        <td class="num">{_fmt_inr(sale.unit_price)}</td>
-        <td class="ctr">{sale.uom or 'Nos'}</td>
-        <td class="ctr">—</td>
-        <td class="num">{_fmt_inr(sale.subtotal)}</td>
-      </tr>
+      {''.join(
+          f'''<tr>
+            <td class="ctr">{i+1}</td>
+            <td>
+              <b>{it.item}</b>
+              {('<br/><span style="font-size:10px;color:#555">' + sale.project + '</span>') if sale.project and i == 0 else ''}
+            </td>
+            <td class="ctr">{hsn_sac}</td>
+            <td class="num">{_fmt_inr(it.quantity)}&nbsp;{it.uom or 'Nos'}</td>
+            <td class="num">{_fmt_inr(it.unit_price)}</td>
+            <td class="ctr">{it.uom or 'Nos'}</td>
+            <td class="ctr">—</td>
+            <td class="num">{_fmt_inr(it.subtotal)}</td>
+          </tr>'''
+          for i, it in enumerate(sale.items)
+      )}
       <!-- blank rows for spacing on A4 -->
       {''.join('<tr>' + '<td style="height:20px"></td>'*8 + '</tr>' for _ in range(7))}
     </tbody>
@@ -769,9 +786,8 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
       <div style="font-style:italic">INR {words}</div>
       {('<div style="margin-top:8px;font-size:10.5px"><b>Payment Note:</b> ' + sale.payment_note + '</div>') if sale.payment_note else ''}
       <div style="margin-top:12px;font-size:10px;color:#666">
-        Total Dispatched: {_fmt_inr(sale.dispatched_qty)} {sale.uom or 'Nos'} &nbsp;|&nbsp;
-        Total Delivered: {_fmt_inr(total_delivered)} {sale.uom or 'Nos'} &nbsp;|&nbsp;
-        Balance Pending: {_fmt_inr(pending_qty)} {sale.uom or 'Nos'}
+        Total Delivered (PO): {_fmt_inr(total_delivered)} &nbsp;|&nbsp;
+        Balance Pending (PO): {_fmt_inr(pending_qty)}
       </div>
     </div>
 
@@ -784,15 +800,15 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
         </tr>
         <tr>
           <td class="lbl">IGST @ {igst_rate}%</td>
-          <td class="val">{_fmt_inr(igst_amt)}</td>
+          <td class="val">{_fmt_inr(igst_amt) if igst_amt else '—'}</td>
         </tr>
         <tr>
           <td class="lbl">CGST @ {cgst_rate}%</td>
-          <td class="val">—</td>
+          <td class="val">{_fmt_inr(cgst_amt) if cgst_amt else '—'}</td>
         </tr>
         <tr>
           <td class="lbl">SGST @ {sgst_rate}%</td>
-          <td class="val">—</td>
+          <td class="val">{_fmt_inr(sgst_amt) if sgst_amt else '—'}</td>
         </tr>
         <tr>
           <td class="lbl">Freight / P&amp;F</td>
@@ -831,26 +847,26 @@ def get_invoice_document(sale_id: int, download: bool = False, db: Session = Dep
     </thead>
     <tbody>
       <tr>
-        <td class="ctr">—</td>
+        <td class="ctr">{hsn_sac}</td>
         <td class="num">{_fmt_inr(sale.subtotal)}</td>
-        <td class="ctr">{igst_rate}%</td>
-        <td class="num">{_fmt_inr(igst_amt)}</td>
-        <td class="ctr">—</td>
-        <td class="num">—</td>
-        <td class="ctr">—</td>
-        <td class="num">—</td>
-        <td class="num">{_fmt_inr(igst_amt)}</td>
+        <td class="ctr">{f"{igst_rate}%" if igst_rate else "—"}</td>
+        <td class="num">{_fmt_inr(igst_amt) if igst_amt else "—"}</td>
+        <td class="ctr">{f"{cgst_rate}%" if cgst_rate else "—"}</td>
+        <td class="num">{_fmt_inr(cgst_amt) if cgst_amt else "—"}</td>
+        <td class="ctr">{f"{sgst_rate}%" if sgst_rate else "—"}</td>
+        <td class="num">{_fmt_inr(sgst_amt) if sgst_amt else "—"}</td>
+        <td class="num">{_fmt_inr(sale.gst_amount)}</td>
       </tr>
       <tr style="font-weight:700;background:#f7f7f7">
         <td>Total</td>
         <td class="num">{_fmt_inr(sale.subtotal)}</td>
         <td></td>
-        <td class="num">{_fmt_inr(igst_amt)}</td>
+        <td class="num">{_fmt_inr(igst_amt) if igst_amt else "—"}</td>
         <td></td>
-        <td class="num">—</td>
+        <td class="num">{_fmt_inr(cgst_amt) if cgst_amt else "—"}</td>
         <td></td>
-        <td class="num">—</td>
-        <td class="num">{_fmt_inr(igst_amt)}</td>
+        <td class="num">{_fmt_inr(sgst_amt) if sgst_amt else "—"}</td>
+        <td class="num">{_fmt_inr(sale.gst_amount)}</td>
       </tr>
     </tbody>
   </table>

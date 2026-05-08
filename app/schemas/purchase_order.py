@@ -5,14 +5,20 @@ from typing import Optional, List
 class POLineItemBase(BaseModel):
     item: str
     quantity: float = 0
+    delivered_quantity: float = 0
     uom: str = "Nos"
     unit_price: float = 0
+
+    @property
+    def pending_quantity(self) -> float:
+        return max(0, self.quantity - self.delivered_quantity)
 
 class POLineItemCreate(POLineItemBase):
     pass
 
 class POLineItemOut(POLineItemBase):
     id: int
+    pending_quantity: float = 0
     model_config = {"from_attributes": True}
 
 class PurchaseOrderBase(BaseModel):
@@ -54,7 +60,7 @@ class PurchaseOrderOut(PurchaseOrderBase):
     pending_quantity: float = 0
     unit_price: float = 0
     gst_rate: float = 0
-    delivery_status: str = "Pending"
+    delivery_status: str = "Not Delivered"
     subtotal: float = 0
     gst_amount: float = 0
     grand_total: float = 0

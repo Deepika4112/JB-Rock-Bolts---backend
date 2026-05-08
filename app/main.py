@@ -56,6 +56,24 @@ async def lifespan(app: FastAPI):
                     conn.execute(text("ALTER TABLE purchase_orders ADD COLUMN project_id INT NULL"))
                 except Exception:
                     pass
+
+            # Safely migrate po_line_items.delivered_quantity
+            try:
+                conn.execute(text("SELECT delivered_quantity FROM po_line_items LIMIT 1"))
+            except Exception:
+                try:
+                    conn.execute(text("ALTER TABLE po_line_items ADD COLUMN delivered_quantity FLOAT DEFAULT 0"))
+                except Exception:
+                    pass
+
+            # Safely migrate sales.line_item_id
+            try:
+                conn.execute(text("SELECT line_item_id FROM sales LIMIT 1"))
+            except Exception:
+                try:
+                    conn.execute(text("ALTER TABLE sales ADD COLUMN line_item_id INT NULL"))
+                except Exception:
+                    pass
                     
             # Safely add constraints to purchase_orders
             try:
@@ -92,23 +110,41 @@ async def lifespan(app: FastAPI):
             except Exception:
                 pass
 
-            # Safely migrate sales.invoice_url and address fields
-            try:
-                conn.execute(text("SELECT invoice_url FROM sales LIMIT 1"))
-            except Exception:
-                try:
-                    conn.execute(text("ALTER TABLE sales ADD COLUMN invoice_url VARCHAR(500) NULL"))
-                except Exception:
-                    pass
-
-            for col in ["created_by", "updated_by", "dispatch_from", "ship_to", "bill_to", "dispatched_through", "buyers_order_no", "payment_terms"]:
+            # Safely migrate sales fields for multi-item support
+            for col, dtype in [
+                ("subtotal", "FLOAT DEFAULT 0"),
+                ("gst_amount", "FLOAT DEFAULT 0"),
+                ("grand_total", "FLOAT DEFAULT 0"),
+                ("e_way_bill_no", "VARCHAR(100) NULL"),
+                ("hsn_code", "VARCHAR(50) NULL"),
+                ("e_way_bill_url", "VARCHAR(500) NULL"),
+            ]:
                 try:
                     conn.execute(text(f"SELECT {col} FROM sales LIMIT 1"))
+                except Exception:
+                    try:
+                        conn.execute(text(f"ALTER TABLE sales ADD COLUMN {col} {dtype}"))
+                    except Exception:
+                        pass
+
+            for col in ["created_by", "updated_by", "dispatch_from", "ship_to", "bill_to", "dispatched_through", "buyers_order_no", "payment_terms", "item", "uom"]:
+                try:
+                    conn.execute(text(f"SELECT {col} FROM sales LIMIT 1"))
+                    # If it exists, make it nullable (especially for legacy columns like item, uom)
+                    if col in ["item", "uom"]:
+                        conn.execute(text(f"ALTER TABLE sales MODIFY COLUMN {col} VARCHAR(300) NULL"))
                 except Exception:
                     try:
                         conn.execute(text(f"ALTER TABLE sales ADD COLUMN {col} TEXT NULL"))
                     except Exception:
                         pass
+            
+            for col in ["dispatched_qty", "total_qty", "previous_delivered", "unit_price", "gst_rate"]:
+                try:
+                    conn.execute(text(f"SELECT {col} FROM sales LIMIT 1"))
+                    conn.execute(text(f"ALTER TABLE sales MODIFY COLUMN {col} FLOAT NULL"))
+                except Exception:
+                    pass
     except Exception as e:
         logger.error(f"Error applying schema updates: {e}")
 
