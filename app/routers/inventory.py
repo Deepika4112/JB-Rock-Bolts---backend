@@ -5,7 +5,6 @@ from typing import List
 from app.database import get_db
 from app.models.models import Product, Sale
 from app.schemas.product import ProductCreate, ProductUpdate, ProductOut
-from app.schemas.product import ProductCreate, ProductUpdate, ProductOut
 from app.utils.helpers import derive_inventory_status, log_activity
 
 router = APIRouter(prefix="/api/inventory", tags=["Inventory"])

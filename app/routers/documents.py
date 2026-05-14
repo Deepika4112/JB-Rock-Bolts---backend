@@ -318,24 +318,24 @@ def get_po_document(po_id: int, db: Session = Depends(get_db)):
   <div class="totals-wrap">
     <table class="totals-table">
       <tr>
-        <td class="lbl">Total Amount</td>
+        <td class="lbl">Total Taxable Amount</td>
         <td class="val">{_fmt_inr(subtotal)}</td>
       </tr>
       <tr>
-        <td class="lbl">Add IGST&nbsp;@&nbsp;{igst_rate}%</td>
+        <td class="lbl">{'Add IGST' if igst_rate == 0 and igst_amt > 0 else f'Add IGST&nbsp;@&nbsp;{igst_rate}%'}</td>
         <td class="val">{_fmt_inr(igst_amt)}</td>
       </tr>
       <tr>
-        <td class="lbl">Add CGST&nbsp;@&nbsp;{cgst_rate}%</td>
+        <td class="lbl">{'Add CGST' if cgst_rate == 0 and cgst_amt > 0 else f'Add CGST&nbsp;@&nbsp;{cgst_rate}%'}</td>
         <td class="val">{_fmt_inr(cgst_amt) if cgst_amt else '—'}</td>
       </tr>
       <tr>
-        <td class="lbl">Add SGST&nbsp;@&nbsp;{sgst_rate}%</td>
+        <td class="lbl">{'Add SGST' if sgst_rate == 0 and sgst_amt > 0 else f'Add SGST&nbsp;@&nbsp;{sgst_rate}%'}</td>
         <td class="val">{_fmt_inr(sgst_amt) if sgst_amt else '—'}</td>
       </tr>
       <tr>
         <td class="lbl">P &amp; F (Freight)</td>
-        <td class="val">{_fmt_inr(freight)}</td>
+        <td class="val">{_fmt_inr(freight + sum(li.freight for li in po.line_items) if po.line_items else freight)}</td>
       </tr>
       <tr>
         <td class="lbl">Round Off</td>

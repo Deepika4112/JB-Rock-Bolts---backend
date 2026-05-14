@@ -4,6 +4,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
+from typing import List
 import enum
 
 
@@ -110,26 +111,93 @@ class PurchaseOrder(Base):
     line_items = relationship("POLineItem", back_populates="purchase_order", cascade="all, delete-orphan", order_by="POLineItem.id")
 
     @property
+    def total_qty(self) -> float:
+        if self.line_items:
+            return sum(li.quantity for li in self.line_items)
+        return self.total_quantity
+
+    @property
+    def delivered_qty(self) -> float:
+        if self.line_items:
+            return sum(li.delivered_quantity for li in self.line_items)
+        return self.delivered_quantity
+
+    @property
     def pending_quantity(self) -> float:
-        return max(0, self.total_quantity - self.delivered_quantity)
+        return max(0, self.total_qty - self.delivered_qty)
 
     @property
     def delivery_status(self) -> str:
-        if self.delivered_quantity <= 0:
+        d_qty = self.delivered_qty
+        t_qty = self.total_qty
+        if d_qty <= 0:
             return DeliveryStatus.NOT_DELIVERED
-        elif self.delivered_quantity >= self.total_quantity:
+        elif d_qty >= t_qty:
             return DeliveryStatus.DELIVERED
-        return "Partial"
+        return DeliveryStatus.PARTIAL
+    @property
+    def all_dispatches_marked(self) -> bool:
+        from sqlalchemy.orm import object_session
+        from sqlalchemy import or_, func
+        # Local import to avoid circular dependency
+        from .models import Sale 
+        
+        # 1. PO must be fully dispatched quantity-wise
+        if self.delivery_status != DeliveryStatus.DELIVERED:
+            return False
+            
+        # 2. Find ALL dispatches linked by ID or Number (case-insensitive)
+        session = object_session(self)
+        po_num_clean = str(self.po_number or "").strip().lower()
+        
+        if session:
+            all_related_sales = session.query(Sale).filter(
+                or_(
+                    Sale.po_id == self.id,
+                    func.lower(func.trim(Sale.po_number)) == po_num_clean
+                )
+            ).all()
+        else:
+            all_related_sales = self.sales
+            
+        # If no sales records exist yet, it's definitely not finished
+        if not all_related_sales:
+            return False
+            
+        # 3. Every single dispatch found must be "Delivered" AND have enough challans
+        for s in all_related_sales:
+            # Check if this sale is marked as Delivered
+            if s.delivery_status != "Delivered":
+                return False
+                
+            # COUNT DISPATCH EVENTS: 
+            # 1 (initial) + number of "Items Dispatched" activities
+            dispatch_count = 1
+            if s.activities:
+                for act in s.activities:
+                    if act.action == "Items Dispatched":
+                        dispatch_count += 1
+            
+            # Check if it has enough valid file URLs (one per dispatch event)
+            url = s.delivery_challan_url or ""
+            valid_urls = [u for u in url.split(";") if u and u.strip()]
+            
+            if len(valid_urls) < dispatch_count:
+                return False
+                
+        return True
 
     @property
     def gst_rate(self) -> float:
-        if not self.gst:
-            return 18.0
+        if self.gst is None or str(self.gst).strip() in ("", "0"):
+            return 0.0
+        if str(self.gst).startswith("₹"):
+            return 0.0
         cleaned = str(self.gst).replace("%", "").strip()
         try:
             return float(cleaned)
         except ValueError:
-            return 18.0
+            return 0.0
 
     @property
     def subtotal(self) -> float:
@@ -139,11 +207,25 @@ class PurchaseOrder(Base):
 
     @property
     def gst_amount(self) -> float:
+        # If global GST is set on the PO, use it
+        if self.gst and str(self.gst).strip() not in ("", "0"):
+            if str(self.gst).startswith("₹"):
+                cleaned = str(self.gst).replace("₹", "").replace(",", "").strip()
+                try:
+                    return float(cleaned)
+                except ValueError:
+                    return 0.0
+            else:
+                return self.subtotal * self.gst_rate / 100
+        # Otherwise sum per-item GST
+        if self.line_items:
+            return sum(li.gst_amount for li in self.line_items)
         return self.subtotal * self.gst_rate / 100
 
     @property
     def grand_total(self) -> float:
-        return self.subtotal + self.gst_amount + self.freight
+        items_freight = sum(li.freight for li in self.line_items) if self.line_items else 0.0
+        return self.subtotal + self.gst_amount + self.freight + items_freight
 
     @property
     def items_display(self) -> str:
@@ -163,6 +245,38 @@ class POLineItem(Base):
     delivered_quantity = Column(Float, nullable=False, default=0)
     uom = Column(String(50), nullable=False, default="Nos")
     unit_price = Column(Float, nullable=False, default=0)
+    gst = Column(String(20), nullable=True, default="0")
+    freight = Column(Float, nullable=False, default=0)
+
+    @property
+    def subtotal(self) -> float:
+        return self.quantity * self.unit_price
+
+    @property
+    def gst_rate(self) -> float:
+        if self.gst is None or str(self.gst).strip() in ("", "0"):
+            return 0.0
+        if str(self.gst).startswith("₹"):
+            return 0.0
+        cleaned = str(self.gst).replace("%", "").strip()
+        try:
+            return float(cleaned)
+        except ValueError:
+            return 0.0
+
+    @property
+    def gst_amount(self) -> float:
+        if self.gst and str(self.gst).startswith("₹"):
+            cleaned = str(self.gst).replace("₹", "").replace(",", "").strip()
+            try:
+                return float(cleaned)
+            except ValueError:
+                return 0.0
+        return self.subtotal * self.gst_rate / 100
+
+    @property
+    def grand_total(self) -> float:
+        return self.subtotal + self.gst_amount + self.freight
 
     purchase_order = relationship("PurchaseOrder", back_populates="line_items")
 
@@ -205,6 +319,18 @@ class Sale(Base):
     delivery_challan_url = Column(String(500), nullable=True)
     hsn_code = Column(String(50), nullable=True)
     
+    @property
+    def invoice_urls(self) -> List[str]:
+        return [url for url in (self.invoice_url or "").split(";") if url]
+
+    @property
+    def e_way_bill_urls(self) -> List[str]:
+        return [url for url in (self.e_way_bill_url or "").split(";") if url]
+
+    @property
+    def delivery_challan_urls(self) -> List[str]:
+        return [url for url in (self.delivery_challan_url or "").split(";") if url]
+
     @property
     def items_display(self) -> str:
         if self.items:

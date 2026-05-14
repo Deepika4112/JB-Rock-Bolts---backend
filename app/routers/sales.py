@@ -8,16 +8,16 @@ import uuid
 from pydantic import BaseModel
 from app.database import get_db
 from app.utils.helpers import generate_invoice_number, compute_sale_financials, log_activity
+from app.models.models import Sale, SaleActivity, PurchaseOrder, SaleItem, POLineItem
+from app.schemas.sale import SaleCreate, SaleUpdate, SaleOut, SaleActivityCreate, SaleActivityOut, SaleItemCreate
+
+router = APIRouter(prefix="/api/sales", tags=["Sales"])
 
 
 class MarkDeliveredPayload(BaseModel):
     delivery_challan_url: str
     updated_by: Optional[str] = None
-from app.models.models import Sale, SaleActivity, PurchaseOrder, SaleItem, POLineItem
-from app.schemas.sale import SaleCreate, SaleUpdate, SaleOut, SaleActivityCreate, SaleActivityOut, SaleItemCreate
-# from app.utils.helpers import generate_invoice_number
 
-router = APIRouter(prefix="/api/sales", tags=["Sales"])
 
 
 @router.get("", response_model=List[SaleOut])
@@ -141,6 +141,47 @@ def update_sale(sale_id: int, payload: SaleUpdate, db: Session = Depends(get_db)
     updates = payload.model_dump(exclude_unset=True)
     updated_by = updates.pop("updated_by", None)
 
+    if "items" in updates:
+        new_items_data = updates.pop("items")
+        po = db.get(PurchaseOrder, sale.po_id)
+        
+        # 1. Rollback old quantities
+        for old_item in sale.items:
+            if po:
+                po.delivered_quantity = max(0, po.delivered_quantity - old_item.quantity)
+            if old_item.line_item_id:
+                li = db.get(POLineItem, old_item.line_item_id)
+                if li:
+                    li.delivered_quantity = max(0, li.delivered_quantity - old_item.quantity)
+        
+        # 2. Delete old items
+        db.query(SaleItem).filter(SaleItem.sale_id == sale.id).delete()
+        
+        # 3. Add new items and update PO
+        for item_data in new_items_data:
+            # item_data is a dict because of model_dump()
+            li_id = item_data.get("line_item_id") if (item_data.get("line_item_id") and item_data.get("line_item_id") > 0) else None
+            
+            new_item = SaleItem(
+                sale_id=sale.id,
+                line_item_id=li_id,
+                item=item_data.get("item"),
+                uom=item_data.get("uom", "Nos"),
+                quantity=item_data.get("quantity", 0),
+                unit_price=item_data.get("unit_price", 0),
+                gst_rate=item_data.get("gst_rate", 18),
+                subtotal=item_data.get("subtotal", 0),
+                gst_amount=item_data.get("gst_amount", 0),
+                total_amount=item_data.get("total_amount", 0)
+            )
+            db.add(new_item)
+            if po:
+                po.delivered_quantity += item_data.get("quantity", 0)
+            if li_id:
+                li = db.get(POLineItem, li_id)
+                if li:
+                    li.delivered_quantity += item_data.get("quantity", 0)
+
     changed_fields = []
     for field, value in updates.items():
         old_val = getattr(sale, field, None)
@@ -151,12 +192,16 @@ def update_sale(sale_id: int, payload: SaleUpdate, db: Session = Depends(get_db)
     sale.updated_by = updated_by
     sale.updated_at = datetime.utcnow()
 
-    if "payment_status" in changed_fields:
+    if "payment_status" in changed_fields or "items" in payload.model_dump(exclude_unset=True):
+        action = "Sale Details Updated"
+        if "payment_status" in changed_fields:
+            action = "Payment Status Updated"
+            
         activity = SaleActivity(
             sale_id=sale.id,
-            action="Payment Status Updated",
+            action=action,
             note=payload.payment_note,
-            payment_status=str(updates.get("payment_status", "")),
+            payment_status=str(updates.get("payment_status", sale.payment_status.value if hasattr(sale.payment_status, 'value') else sale.payment_status)),
             by=updated_by,
         )
         db.add(activity)

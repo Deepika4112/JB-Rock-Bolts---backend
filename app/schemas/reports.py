@@ -45,3 +45,28 @@ class FulfillmentReportRow(BaseModel):
 
 class FulfillmentReportOut(BaseModel):
     rows: List[FulfillmentReportRow]
+
+
+class PendingPORow(BaseModel):
+    id: int
+    po_number: str
+    client_name: str
+    project: str
+    item: str
+    subtotal: float
+    gst_amount: float
+    total_value: float
+    pending_subtotal: float
+    pending_gst: float
+    pending_total: float
+    status: str
+    date: str
+
+
+class PendingPOReportOut(BaseModel):
+    rows: List[PendingPORow]
+    total_subtotal: float
+    total_gst: float
+    total_value: float
+    total_pending_value: float
+    count: int

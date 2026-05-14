@@ -15,10 +15,10 @@ class SaleActivityOut(BaseModel):
     id: int
     sale_id: int
     action: str
-    note: Optional[str]
-    payment_status: Optional[str]
+    note: Optional[str] = None
+    payment_status: Optional[str] = None
     at: datetime
-    by: Optional[str]
+    by: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -29,14 +29,14 @@ class SaleItemCreate(BaseModel):
     uom: str = "Nos"
     quantity: float
     unit_price: float
-    gst_rate: float = 18
-    subtotal: float
-    gst_amount: float
-    total_amount: float
+    gst_rate: float = 0
+    subtotal: float = 0.0
+    gst_amount: float = 0.0
+    total_amount: float = 0.0
 
 class SaleItemOut(BaseModel):
     id: int
-    line_item_id: Optional[int]
+    line_item_id: Optional[int] = None
     item: str
     uom: str
     quantity: float
@@ -86,42 +86,45 @@ class SaleUpdate(BaseModel):
     e_way_bill_no: Optional[str] = None
     buyers_order_no: Optional[str] = None
     payment_terms: Optional[str] = None
-    invoice_number: Optional[str] = None
     delivery_status: Optional[str] = None
     delivery_challan_url: Optional[str] = None
     hsn_code: Optional[str] = None
+    items: Optional[List[SaleItemCreate]] = None
+    subtotal: Optional[float] = None
+    gst_amount: Optional[float] = None
     freight: Optional[float] = None
+    grand_total: Optional[float] = None
     updated_by: Optional[str] = None
 
 class SaleOut(BaseModel):
     id: int
     po_id: int
     po_number: str
-    invoice_number: Optional[str]
+    invoice_number: Optional[str] = None
     client_name: str
-    project: Optional[str]
+    project: Optional[str] = None
     subtotal: float
     gst_amount: float
     freight: float
     grand_total: float
     payment_status: PaymentStatus
-    payment_note: Optional[str]
+    payment_note: Optional[str] = None
     created_at: datetime
-    created_by: Optional[str]
-    updated_at: datetime
-    updated_by: Optional[str]
-    invoice_url: Optional[str]
-    e_way_bill_url: Optional[str]
-    dispatch_from: Optional[str]
-    ship_to: Optional[str]
-    bill_to: Optional[str]
-    dispatched_through: Optional[str]
-    e_way_bill_no: Optional[str]
-    buyers_order_no: Optional[str]
-    payment_terms: Optional[str]
+    created_by: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+    invoice_url: Optional[str] = None
+    e_way_bill_url: Optional[str] = None
+    dispatch_from: Optional[str] = None
+    ship_to: Optional[str] = None
+    bill_to: Optional[str] = None
+    dispatched_through: Optional[str] = None
+    e_way_bill_no: Optional[str] = None
+    buyers_order_no: Optional[str] = None
+    payment_terms: Optional[str] = None
     delivery_status: str = "Not Delivered"
     delivery_challan_url: Optional[str] = None
-    hsn_code: Optional[str]
+    hsn_code: Optional[str] = None
     items: List[SaleItemOut] = []
     activities: List[SaleActivityOut] = []
 
@@ -138,6 +141,21 @@ class SaleOut(BaseModel):
     @property
     def dispatched_qty(self) -> float:
         return sum(i.quantity for i in self.items)
+
+    @computed_field
+    @property
+    def invoice_urls(self) -> List[str]:
+        return [url for url in (self.invoice_url or "").split(";") if url]
+
+    @computed_field
+    @property
+    def e_way_bill_urls(self) -> List[str]:
+        return [url for url in (self.e_way_bill_url or "").split(";") if url]
+
+    @computed_field
+    @property
+    def delivery_challan_urls(self) -> List[str]:
+        return [url for url in (self.delivery_challan_url or "").split(";") if url]
 
     @computed_field
     @property

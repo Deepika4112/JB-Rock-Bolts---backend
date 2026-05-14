@@ -19,7 +19,7 @@ PRODUCTS = [
     "JB-19 H Type RE-BAR Couplers",
 ]
 
-UOM_OPTIONS = ["Nos", "MT", "Kg", "Ton", "Set", "Meter", "Sqm", "Cum", "Ltr", "Box", "Unit", "ZNS"]
+UOM_OPTIONS = ["Nos", "MT", "Kg", "Ton", "Set", "Meter", "Sqm", "Cum", "Ltr", "Box", "Unit", "ZNS", "PC"]
 
 LOCATIONS = [
     "Delhi", "Mumbai", "Pune", "Bengaluru", "Chennai",

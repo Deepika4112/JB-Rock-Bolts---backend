@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from app.database import get_db
 from app.models.models import Client, PurchaseOrder, Record
@@ -9,8 +10,6 @@ from app.utils.helpers import log_activity
 
 router = APIRouter(prefix="/api/clients", tags=["Clients"])
 
-
-from sqlalchemy.exc import IntegrityError
 
 @router.get("", response_model=List[ClientOut])
 def list_clients(location: Optional[str] = None, db: Session = Depends(get_db)):
