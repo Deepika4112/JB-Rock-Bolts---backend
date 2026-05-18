@@ -10,6 +10,17 @@ from typing import List
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 
+def normalize_client_name(name: str) -> str:
+    if not name:
+        return ""
+    # Casing, prefixes/suffixes, dots, commas, spaces, and generic terms
+    n = name.upper()
+    n = n.replace("M/S.", "").replace("M/S", "").replace("LIMITED", "").replace("LTD.", "").replace("LTD", "")
+    n = n.replace("PROJECTS", "").replace("PRODUCT", "")
+    n = n.replace(".", "").replace(",", "").replace(" ", "").strip()
+    return n
+
+
 @router.get("/stats", response_model=DashboardStats)
 def get_stats(db: Session = Depends(get_db)):
     # Total revenue calculated from items + freight for maximum accuracy
@@ -20,8 +31,14 @@ def get_stats(db: Session = Depends(get_db)):
 
     # Total number of dispatches
     total_orders = db.query(func.count(Sale.id)).scalar() or 0
-    # Total unique clients who have made a purchase
-    total_clients = db.query(func.count(func.distinct(Sale.client_name))).scalar() or 0
+    # Total unique clients with smart normalization (ignores M/s, LTD, LIMITED, casing)
+    all_po_clients = db.query(PurchaseOrder.client_name).all()
+    normalized_names = set()
+    for row in all_po_clients:
+        n = normalize_client_name(row.client_name)
+        if n:
+            normalized_names.add(n)
+    total_clients = len(normalized_names) or 0
     
     # Delivered orders should be those that have enough challans AND the PO is finished
     all_sales = db.query(Sale).all()
@@ -169,9 +186,28 @@ def get_recent_sales(limit: int = 6, db: Session = Depends(get_db)):
         elif r.delivery_status == "Partial":
             display_status = "Partial"
             
+        # Fallback and Normalize client name
+        raw_name = r.client_name
+        if not raw_name or raw_name.strip() == "":
+            if r.purchase_order:
+                raw_name = r.purchase_order.client_name
+        
+        # Normalize for consistent display if requested
+        display_client_name = raw_name
+        if raw_name:
+            # We use a slightly less aggressive normalization for display to keep it readable
+            # but consistent enough to look "proper"
+            display_client_name = raw_name.strip().replace("  ", " ")
+            # If it matches our Tata rule, standardize it
+            norm = normalize_client_name(raw_name)
+            if "TATA" in norm:
+                display_client_name = "M/s. Tata Projects"
+            elif "AFCONS" in norm:
+                display_client_name = "M/s. AFCONS Infrastructure Limited"
+
         res.append(RecentSale(
             id=r.id,
-            client_name=r.client_name,
+            client_name=display_client_name or "Unknown Client",
             product=r.items_display,
             price=calc_price,
             payment_status=r.payment_status.value if hasattr(r.payment_status, 'value') else str(r.payment_status),

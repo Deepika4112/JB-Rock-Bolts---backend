@@ -114,13 +114,13 @@ class PurchaseOrder(Base):
     def total_qty(self) -> float:
         if self.line_items:
             return sum(li.quantity for li in self.line_items)
-        return self.total_quantity
+        return self.total_quantity  # type: ignore
 
     @property
     def delivered_qty(self) -> float:
         if self.line_items:
             return sum(li.delivered_quantity for li in self.line_items)
-        return self.delivered_quantity
+        return self.delivered_quantity  # type: ignore
 
     @property
     def pending_quantity(self) -> float:
@@ -139,8 +139,7 @@ class PurchaseOrder(Base):
     def all_dispatches_marked(self) -> bool:
         from sqlalchemy.orm import object_session
         from sqlalchemy import or_, func
-        # Local import to avoid circular dependency
-        from .models import Sale 
+        # Sale is defined below, automatically available in globals
         
         # 1. PO must be fully dispatched quantity-wise
         if self.delivery_status != DeliveryStatus.DELIVERED:
@@ -203,7 +202,7 @@ class PurchaseOrder(Base):
     def subtotal(self) -> float:
         if self.line_items:
             return sum(li.quantity * li.unit_price for li in self.line_items)
-        return self.total_quantity * self.unit_price
+        return self.total_quantity * self.unit_price  # type: ignore
 
     @property
     def gst_amount(self) -> float:
@@ -225,14 +224,14 @@ class PurchaseOrder(Base):
     @property
     def grand_total(self) -> float:
         items_freight = sum(li.freight for li in self.line_items) if self.line_items else 0.0
-        return self.subtotal + self.gst_amount + self.freight + items_freight
+        return self.subtotal + self.gst_amount + self.freight + items_freight  # type: ignore
 
     @property
     def items_display(self) -> str:
         """Comma-separated item names for display."""
         if self.line_items:
             return ", ".join(li.item for li in self.line_items)
-        return self.item or ""
+        return self.item or ""  # type: ignore
 
 
 class POLineItem(Base):
@@ -250,7 +249,7 @@ class POLineItem(Base):
 
     @property
     def subtotal(self) -> float:
-        return self.quantity * self.unit_price
+        return self.quantity * self.unit_price  # type: ignore
 
     @property
     def gst_rate(self) -> float:
@@ -276,7 +275,7 @@ class POLineItem(Base):
 
     @property
     def grand_total(self) -> float:
-        return self.subtotal + self.gst_amount + self.freight
+        return self.subtotal + self.gst_amount + self.freight  # type: ignore
 
     purchase_order = relationship("PurchaseOrder", back_populates="line_items")
 
@@ -354,7 +353,7 @@ class SaleItem(Base):
     uom = Column(String(50), nullable=False, default="Nos")
     quantity = Column(Float, nullable=False, default=0)
     unit_price = Column(Float, nullable=False, default=0)
-    gst_rate = Column(Float, nullable=False, default=18)
+    gst_rate = Column(Float, nullable=False, default=0)
     
     # Pre-calculated totals for this item
     subtotal = Column(Float, nullable=False, default=0)

@@ -84,3 +84,18 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     db.refresh(user)
     log_activity(db, "User Updated", "User", f"User {user.name} was updated.", "System/Admin", user.id)
     return user
+
+
+@router.post("/reset-password")
+def reset_password(payload: UserLogin, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == payload.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User with this email not found."
+        )
+    
+    user.hashed_password = hash_password(payload.password)
+    db.commit()
+    log_activity(db, "Password Reset", "User", f"User {user.name} reset their password.", user.name, user.id)
+    return {"message": "Password updated successfully."}

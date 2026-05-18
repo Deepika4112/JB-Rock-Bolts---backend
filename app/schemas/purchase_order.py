@@ -30,11 +30,11 @@ class POLineItemOut(POLineItemBase):
     @computed_field
     @property
     def gst_rate(self) -> float:
-        if self.gst is None or str(self.gst).strip() in ("", "0"):
+        if self.gst is None or self.gst.strip() in ("", "0"):
             return 0.0
-        if str(self.gst).startswith("₹"):
+        if self.gst.startswith("₹"):
             return 0.0
-        cleaned = str(self.gst).replace("%", "").strip()
+        cleaned = self.gst.replace("%", "").strip()
         try:
             return float(cleaned)
         except ValueError:
@@ -43,8 +43,8 @@ class POLineItemOut(POLineItemBase):
     @computed_field
     @property
     def gst_amount(self) -> float:
-        if self.gst and str(self.gst).startswith("₹"):
-            cleaned = str(self.gst).replace("₹", "").replace(",", "").strip()
+        if self.gst and self.gst.startswith("₹"):
+            cleaned = self.gst.replace("₹", "").replace(",", "").strip()
             try:
                 return float(cleaned)
             except ValueError:
@@ -132,11 +132,11 @@ class PurchaseOrderOut(PurchaseOrderBase):
     @computed_field
     @property
     def gst_rate(self) -> float:
-        if self.gst is None or str(self.gst).strip() in ("", "0"):
+        if self.gst is None or self.gst.strip() in ("", "0"):
             return 0.0
-        if str(self.gst).startswith("₹"):
+        if self.gst.startswith("₹"):
             return 0.0
-        cleaned = str(self.gst).replace("%", "").strip()
+        cleaned = self.gst.replace("%", "").strip()
         try:
             return float(cleaned)
         except ValueError:
@@ -162,9 +162,9 @@ class PurchaseOrderOut(PurchaseOrderBase):
     @property
     def gst_amount(self) -> float:
         # 1. Global GST (if set and not "0")
-        if self.gst and str(self.gst).strip() not in ("", "0"):
-            if str(self.gst).startswith("₹"):
-                cleaned = str(self.gst).replace("₹", "").replace(",", "").strip()
+        if self.gst and self.gst.strip() not in ("", "0"):
+            if self.gst.startswith("₹"):
+                cleaned = self.gst.replace("₹", "").replace(",", "").strip()
                 try:
                     return float(cleaned)
                 except ValueError:
