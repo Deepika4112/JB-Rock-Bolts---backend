@@ -5,7 +5,7 @@ from sqlalchemy import func
 from app.database import get_db
 from app.models.models import Sale, PurchaseOrder, Client, PaymentStatus
 from app.schemas.dashboard import DashboardStats, ChartData, ChartDataPoint, MonthlyTrend, RecentSale
-from typing import List
+from typing import List, cast, Any
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -157,7 +157,7 @@ def get_recent_sales(limit: int = 6, db: Session = Depends(get_db)):
     for r in rows:
         # Calculate price from items + freight
         items_sum = sum((float(it.subtotal or 0) + float(it.gst_amount or 0)) for it in r.items)
-        calc_price = items_sum + float(r.freight or 0)
+        calc_price = items_sum + float(cast(Any, r.freight) or 0)
         
         # Delivery status logic: must have enough challans for all dispatch events
         challan_url = r.delivery_challan_url or ""
@@ -199,20 +199,20 @@ def get_recent_sales(limit: int = 6, db: Session = Depends(get_db)):
             # but consistent enough to look "proper"
             display_client_name = raw_name.strip().replace("  ", " ")
             # If it matches our Tata rule, standardize it
-            norm = normalize_client_name(raw_name)
+            norm = normalize_client_name(cast(str, raw_name))
             if "TATA" in norm:
                 display_client_name = "M/s. Tata Projects"
             elif "AFCONS" in norm:
                 display_client_name = "M/s. AFCONS Infrastructure Limited"
 
         res.append(RecentSale(
-            id=r.id,
-            client_name=display_client_name or "Unknown Client",
+            id=cast(int, r.id),
+            client_name=cast(str, display_client_name) or "Unknown Client",
             product=r.items_display,
             price=calc_price,
             payment_status=r.payment_status.value if hasattr(r.payment_status, 'value') else str(r.payment_status),
             delivery_status=display_status,
             date=r.created_at.isoformat() if r.created_at else "",
-            invoice_number=r.invoice_number,
+            invoice_number=cast(str, r.invoice_number) if r.invoice_number else None,
         ))
     return res
