@@ -46,20 +46,32 @@ Interactive docs: `http://localhost:8000/docs`
 ## Setup
 
 ```bash
-# 1. Create virtual environment
-python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
+# 1. Change into the backend folder
+cd JB-Rock-Bolts---backend
 
-# 2. Install dependencies
+# 2. Create virtual environment
+python -m venv .venv
+.venv\Scripts\activate      # Windows PowerShell
+# OR: source .venv/bin/activate     # macOS/Linux
+
+# 3. Install dependencies
 pip install -r requirements.txt
 
-# 3. Configure environment
-cp .env.example .env
+# 4. Configure environment
+copy .env.example .env       # Windows
+# OR: cp .env.example .env   # macOS/Linux
 # Edit .env — set DB_PASSWORD and SECRET_KEY at minimum
 
-# 4. Start the server
-uvicorn app.main:app --reload --port 8000
+# 5. Start the server
+.\.venv\Scripts\Activate.ps1      # Windows PowerShell
+python -m uvicorn app.main:app --reload --port 8000
 ```
+
+> You can also run directly from the repository root:
+> ```powershell
+> D:\jbrocks1\JB-Rock-Bolts---backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+> ```
+> Use the backend `.venv` because `D:\jbrocks1\.venv` may not contain the required packages.
 
 The server will:
 1. Connect to MySQL and create the database if it doesn't exist
