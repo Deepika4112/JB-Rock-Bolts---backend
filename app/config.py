@@ -27,6 +27,23 @@ class Settings(BaseSettings):
     DEFAULT_PAGE_SIZE: int = 50
     MAX_PAGE_SIZE: int = 200
 
+    # ── Cloudflare R2 ─────────────────────────────────────────────────────────
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = "jb-rock-bolts"
+    # Public URL for the bucket — R2.dev subdomain or your custom domain
+    R2_PUBLIC_URL: str = ""
+
+    @property
+    def r2_enabled(self) -> bool:
+        return bool(
+            self.R2_ACCOUNT_ID
+            and self.R2_ACCESS_KEY_ID
+            and self.R2_SECRET_ACCESS_KEY
+            and self.R2_PUBLIC_URL
+        )
+
     @property
     def DATABASE_URL(self) -> str:
         if self.MYSQL_URL:

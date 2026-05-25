@@ -3,31 +3,24 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime
-import shutil
 import os
 import uuid
 from app.database import get_db
 from app.models.models import PurchaseOrder, POLineItem
 from app.schemas.purchase_order import PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderOut
 from app.utils.helpers import log_activity
+from app.services.storage import save_upload
 
 router = APIRouter(prefix="/api/purchase-orders", tags=["Purchase Orders"])
 
 
 @router.post("/upload")
 async def upload_po_file(file: UploadFile = File(...)):
-    UPLOAD_DIR = "uploads"
-    if not os.path.exists(UPLOAD_DIR):
-        os.makedirs(UPLOAD_DIR)
-    
-    file_extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{uuid.uuid4()}{file_extension}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    return {"file_url": f"/uploads/{unique_filename}"}
+    ext = os.path.splitext(file.filename)[1]
+    filename = f"{uuid.uuid4()}{ext}"
+    file_bytes = await file.read()
+    file_url = save_upload(file_bytes, filename, file.content_type or "application/octet-stream")
+    return {"file_url": file_url}
 
 
 @router.get("", response_model=List[PurchaseOrderOut])

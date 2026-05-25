@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-import shutil
 import os
 import uuid
 from pydantic import BaseModel
@@ -10,6 +9,7 @@ from app.database import get_db
 from app.utils.helpers import generate_invoice_number, compute_sale_financials, log_activity
 from app.models.models import Sale, SaleActivity, PurchaseOrder, SaleItem, POLineItem
 from app.schemas.sale import SaleCreate, SaleUpdate, SaleOut, SaleActivityCreate, SaleActivityOut, SaleItemCreate
+from app.services.storage import save_upload
 
 router = APIRouter(prefix="/api/sales", tags=["Sales"])
 
@@ -17,7 +17,6 @@ router = APIRouter(prefix="/api/sales", tags=["Sales"])
 class MarkDeliveredPayload(BaseModel):
     delivery_challan_url: str
     updated_by: Optional[str] = None
-
 
 
 @router.get("", response_model=List[SaleOut])
@@ -38,18 +37,11 @@ def list_sales(
 
 @router.post("/upload")
 async def upload_invoice_file(file: UploadFile = File(...)):
-    UPLOAD_DIR = "uploads"
-    if not os.path.exists(UPLOAD_DIR):
-        os.makedirs(UPLOAD_DIR)
-    
-    file_extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{uuid.uuid4()}{file_extension}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    return {"file_url": f"/uploads/{unique_filename}"}
+    ext = os.path.splitext(file.filename)[1]
+    filename = f"{uuid.uuid4()}{ext}"
+    file_bytes = await file.read()
+    file_url = save_upload(file_bytes, filename, file.content_type or "application/octet-stream")
+    return {"file_url": file_url}
 
 
 @router.post("", response_model=SaleOut, status_code=status.HTTP_201_CREATED)

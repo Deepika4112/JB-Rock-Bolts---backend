@@ -176,12 +176,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Ensure uploads directory exists
-UPLOAD_DIR = "uploads"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
-
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+# Mount local uploads only when R2 is not configured (local development)
+if not settings.r2_enabled:
+    UPLOAD_DIR = "uploads"
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 app.include_router(constants.router)
 app.include_router(dashboard.router)
