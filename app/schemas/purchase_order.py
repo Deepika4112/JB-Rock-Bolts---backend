@@ -1,6 +1,7 @@
 from pydantic import BaseModel, computed_field
 from datetime import datetime
 from typing import Optional, List
+from app.schemas.base import UTCDatetime, OptUTCDatetime
 
 class POLineItemBase(BaseModel):
     item: str
@@ -67,9 +68,9 @@ class PurchaseOrderBase(BaseModel):
     gst: Optional[str] = "0"
     freight: float = 0
     payment_terms: Optional[str] = None
-    remark: Optional[str] = None
     validity_date: Optional[datetime] = None
     file_url: Optional[str] = None
+    remark: Optional[str] = None
 
 class PurchaseOrderCreate(PurchaseOrderBase):
     created_by: Optional[str] = None
@@ -84,11 +85,12 @@ class PurchaseOrderUpdate(BaseModel):
     gst: Optional[str] = None
     freight: Optional[float] = None
     payment_terms: Optional[str] = None
-    remark: Optional[str] = None
     validity_date: Optional[datetime] = None
     file_url: Optional[str] = None
+    remark: Optional[str] = None
     last_updated_by: Optional[str] = None
     line_items: Optional[List[POLineItemCreate]] = None
+
 
 class PurchaseOrderShortClose(BaseModel):
     remark: Optional[str] = None
@@ -96,19 +98,17 @@ class PurchaseOrderShortClose(BaseModel):
 
 class PurchaseOrderOut(PurchaseOrderBase):
     id: int
-    created_at: datetime
+    created_at: UTCDatetime
     created_by: Optional[str] = None
-    last_opened_at: Optional[datetime] = None
+    last_opened_at: Optional[UTCDatetime] = None
     last_opened_by: Optional[str] = None
-    last_updated_at: Optional[datetime] = None
+    last_updated_at: Optional[UTCDatetime] = None
     last_updated_by: Optional[str] = None
-    
+    line_items: List[POLineItemOut] = []
     short_closed: bool = False
     short_closed_at: Optional[datetime] = None
     short_closed_by: Optional[str] = None
     short_closed_remark: Optional[str] = None
-
-    line_items: List[POLineItemOut] = []
 
     @computed_field
     @property

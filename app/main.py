@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles
+import asyncio
 import logging
 import os
 
@@ -31,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app import notifications
+    notifications.init_loop(asyncio.get_running_loop())
     logger.info("Starting JB Rock Bolts API...")
     create_database_if_not_exists()
     Base.metadata.create_all(bind=engine)
@@ -103,6 +106,21 @@ async def lifespan(app: FastAPI):
                     conn.execute(text("ALTER TABLE purchase_orders ADD COLUMN remark TEXT NULL"))
                 except Exception:
                     pass
+
+            # Safely migrate purchase_orders short_closed columns
+            for sc_col, sc_dtype in [
+                ("short_closed", "BOOLEAN DEFAULT FALSE NOT NULL"),
+                ("short_closed_at", "DATETIME NULL"),
+                ("short_closed_by", "VARCHAR(100) NULL"),
+                ("short_closed_remark", "TEXT NULL"),
+            ]:
+                try:
+                    conn.execute(text(f"SELECT {sc_col} FROM purchase_orders LIMIT 1"))
+                except Exception:
+                    try:
+                        conn.execute(text(f"ALTER TABLE purchase_orders ADD COLUMN {sc_col} {sc_dtype}"))
+                    except Exception:
+                        pass
 
             # Safely migrate records.client_id
             try:
