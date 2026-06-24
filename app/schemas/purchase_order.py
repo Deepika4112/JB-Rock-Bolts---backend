@@ -67,6 +67,7 @@ class PurchaseOrderBase(BaseModel):
     gst: Optional[str] = "0"
     freight: float = 0
     payment_terms: Optional[str] = None
+    remark: Optional[str] = None
     validity_date: Optional[datetime] = None
     file_url: Optional[str] = None
 
@@ -83,10 +84,15 @@ class PurchaseOrderUpdate(BaseModel):
     gst: Optional[str] = None
     freight: Optional[float] = None
     payment_terms: Optional[str] = None
+    remark: Optional[str] = None
     validity_date: Optional[datetime] = None
     file_url: Optional[str] = None
     last_updated_by: Optional[str] = None
     line_items: Optional[List[POLineItemCreate]] = None
+
+class PurchaseOrderShortClose(BaseModel):
+    remark: Optional[str] = None
+    user: Optional[str] = None
 
 class PurchaseOrderOut(PurchaseOrderBase):
     id: int
@@ -96,6 +102,12 @@ class PurchaseOrderOut(PurchaseOrderBase):
     last_opened_by: Optional[str] = None
     last_updated_at: Optional[datetime] = None
     last_updated_by: Optional[str] = None
+    
+    short_closed: bool = False
+    short_closed_at: Optional[datetime] = None
+    short_closed_by: Optional[str] = None
+    short_closed_remark: Optional[str] = None
+
     line_items: List[POLineItemOut] = []
 
     @computed_field
@@ -145,6 +157,8 @@ class PurchaseOrderOut(PurchaseOrderBase):
     @computed_field
     @property
     def delivery_status(self) -> str:
+        if self.short_closed:
+            return "Short Closed"
         if self.delivered_quantity <= 0:
             return "Not Delivered"
         elif self.delivered_quantity >= self.total_quantity:

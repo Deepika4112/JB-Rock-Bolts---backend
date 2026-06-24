@@ -96,6 +96,7 @@ class PurchaseOrder(Base):
     gst = Column(String(20), nullable=True, default="18")
     freight = Column(Float, nullable=False, default=0)
     payment_terms = Column(String(100), nullable=True)
+    remark = Column(Text, nullable=True)
     validity_date = Column(DateTime, nullable=True)
     file_url = Column(String(500), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
@@ -104,6 +105,11 @@ class PurchaseOrder(Base):
     last_opened_by = Column(String(100), nullable=True)
     last_updated_at = Column(DateTime, nullable=True)
     last_updated_by = Column(String(100), nullable=True)
+
+    short_closed = Column(Boolean, default=False, nullable=False)
+    short_closed_at = Column(DateTime, nullable=True)
+    short_closed_by = Column(String(100), nullable=True)
+    short_closed_remark = Column(Text, nullable=True)
 
     client_rel = relationship("Client", back_populates="purchase_orders")
     project_rel = relationship("Project", back_populates="purchase_orders")
@@ -128,6 +134,8 @@ class PurchaseOrder(Base):
 
     @property
     def delivery_status(self) -> str:
+        if self.short_closed:
+            return "Short Closed"
         d_qty = self.delivered_qty
         t_qty = self.total_qty
         if d_qty <= 0:

@@ -95,6 +95,15 @@ async def lifespan(app: FastAPI):
                 except Exception:
                     pass
 
+            # Safely migrate purchase_orders.remark
+            try:
+                conn.execute(text("SELECT remark FROM purchase_orders LIMIT 1"))
+            except Exception:
+                try:
+                    conn.execute(text("ALTER TABLE purchase_orders ADD COLUMN remark TEXT NULL"))
+                except Exception:
+                    pass
+
             # Safely migrate records.client_id
             try:
                 conn.execute(text("SELECT client_id FROM records LIMIT 1"))

@@ -7,7 +7,7 @@ import os
 import uuid
 from app.database import get_db
 from app.models.models import PurchaseOrder, POLineItem
-from app.schemas.purchase_order import PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderOut
+from app.schemas.purchase_order import PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderOut, PurchaseOrderShortClose
 from app.utils.helpers import log_activity
 from app.services.storage import save_upload
 
@@ -58,7 +58,6 @@ def create_purchase_order(payload: PurchaseOrderCreate, db: Session = Depends(ge
 
     po = PurchaseOrder(**data)
 
-    # Create line items
     for li_data in payload.line_items:
         po.line_items.append(POLineItem(**li_data.model_dump()))
 
@@ -95,6 +94,12 @@ def update_purchase_order(po_id: int, payload: PurchaseOrderUpdate, db: Session 
     po = db.get(PurchaseOrder, po_id)
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found.")
+    
+    if po.short_closed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot update a Short Closed Purchase Order."
+        )
 
     update_data = payload.model_dump(exclude_unset=True, exclude={"line_items"})
     changed_fields = []
@@ -128,7 +133,7 @@ def update_purchase_order(po_id: int, payload: PurchaseOrderUpdate, db: Session 
                     uom=li_data.uom,
                     unit_price=li_data.unit_price,
                     gst=li_data.gst,
-                    freight=li_data.freight
+                    freight=li_data.freight,
                 )
                 new_line_items.append(new_li)
                 
@@ -184,3 +189,37 @@ def delete_purchase_order(po_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete this Purchase Order due to database constraints (linked records exist)."
         )
+
+@router.post("/{po_id}/short-close", response_model=PurchaseOrderOut)
+def short_close_purchase_order(po_id: int, payload: PurchaseOrderShortClose, db: Session = Depends(get_db)):
+    po = db.get(PurchaseOrder, po_id)
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase order not found.")
+        
+    if po.short_closed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Purchase Order is already Short Closed."
+        )
+        
+    if po.delivery_status == "Delivered":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot Short Close a fully delivered Purchase Order."
+        )
+
+    po.short_closed = True
+    po.short_closed_at = datetime.utcnow()
+    po.short_closed_by = payload.user
+    po.short_closed_remark = payload.remark
+    
+    db.commit()
+    db.refresh(po)
+    
+    details = f"Short Closed PO {po.po_number}."
+    if payload.remark:
+        details += f" Reason: {payload.remark}"
+        
+    log_activity(db, "PO Short Closed", "PurchaseOrder", details, payload.user or "System", po.id)
+    return po
+
