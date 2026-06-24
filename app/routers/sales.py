@@ -58,6 +58,12 @@ def create_sale(payload: SaleCreate, db: Session = Depends(get_db)):
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found.")
 
+    if po.short_closed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create a dispatch or invoice against a Short Closed Purchase Order."
+        )
+
     invoice_number = payload.invoice_number or generate_invoice_number(db)
 
     sale = Sale(
@@ -144,6 +150,12 @@ def update_sale(sale_id: int, payload: SaleUpdate, db: Session = Depends(get_db)
     if "items" in updates:
         new_items_data = updates.pop("items")
         po = db.get(PurchaseOrder, sale.po_id)
+        
+        if po and po.short_closed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot modify dispatch items for a Short Closed Purchase Order."
+            )
         
         # 1. Rollback old quantities
         for old_item in sale.items:

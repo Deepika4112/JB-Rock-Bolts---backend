@@ -408,6 +408,12 @@ def get_po_document(po_id: int, db: Session = Depends(get_db)):
     </table>
   </div>
 
+  {f"""<!-- ── REMARKS ────────────────────────────────────────── -->
+  <div style="margin-top:14px;font-size:11px;">
+    <h4 style="font-size:12px;margin-bottom:6px;text-decoration:underline;font-weight:700">Remarks:</h4>
+    <div style="border:1px solid #ccc;padding:8px 12px;background:#f9f9f9;border-radius:4px;white-space:pre-wrap;">{po.remark}</div>
+  </div>""" if po.remark else ''}
+
   <p style="margin-top:14px;font-size:11px;color:#555">
     We are sending this order in duplicate, please return one copy duly sealed and signed at your
     end as a token of your acceptance.

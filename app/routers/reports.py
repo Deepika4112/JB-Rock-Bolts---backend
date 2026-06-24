@@ -41,9 +41,8 @@ def get_report(
     rows = []
     total_revenue = 0
     for s in sales:
-        # Sum of items for this sale
-        items_sum = sum((float(it.subtotal or 0) + float(it.gst_amount or 0)) for it in s.items)
-        row_price = items_sum + float(s.freight or 0)
+        # Use grand_total directly as it accounts for both new and legacy records
+        row_price = float(s.grand_total or 0)
         total_revenue += row_price
         
         rows.append(ReportRow(
@@ -55,6 +54,8 @@ def get_report(
             po_number=s.po_number,
             invoice_number=s.invoice_number,
             e_way_bill_no=s.e_way_bill_no,
+            subtotal=round(float(s.subtotal or 0), 2),
+            gst_amount=round(float(s.gst_amount or 0), 2),
             price=row_price,
             payment_status=s.payment_status.value if hasattr(s.payment_status, 'value') else str(s.payment_status),
             delivery_status="Dispatched",
@@ -156,6 +157,10 @@ def get_pending_pos_report(
             client_name=o.client_name,
             project=o.project or "—",
             item=o.items_display,
+            uom=o.uom or "Nos",
+            total_qty=round(t_qty, 2),
+            delivered_qty=round(d_qty, 2),
+            pending_qty=round(max(0, t_qty - d_qty), 2),
             subtotal=round(t_sub, 2),
             gst_amount=round(t_gst, 2),
             total_value=round(t_total, 2),

@@ -19,6 +19,8 @@ class ReportRow(BaseModel):
     po_number: Optional[str]
     invoice_number: Optional[str]
     e_way_bill_no: Optional[str] = None
+    subtotal: float = 0
+    gst_amount: float = 0
     price: float
     payment_status: str
     delivery_status: str
@@ -53,6 +55,10 @@ class PendingPORow(BaseModel):
     client_name: str
     project: str
     item: str
+    uom: str = "Nos"
+    total_qty: float = 0
+    delivered_qty: float = 0
+    pending_qty: float = 0
     subtotal: float
     gst_amount: float
     total_value: float
